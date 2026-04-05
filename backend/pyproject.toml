@@ -16,9 +16,7 @@ dependencies = [
     "boto3>=1.35.0",
     "Pillow>=11.0.0",
     "openpyxl>=3.1.0",
-    "Fiona>=1.10.0",
     "Shapely>=2.0.0",
-    "pyproj>=3.7.0",
 ]
 
 [project.optional-dependencies]
