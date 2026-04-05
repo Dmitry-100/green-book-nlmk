@@ -52,21 +52,18 @@
     </div>
     <div class="map-container">
       <div id="ymap" ref="mapEl"></div>
-      <div v-if="mapLoading" class="map-loading">
-        <span>Загрузка карты...</span>
-      </div>
+      <div v-if="mapLoading" class="map-loading">Загрузка карты...</div>
       <div v-if="mapError" class="map-error">
         <span style="font-size: 48px; opacity: 0.3">🗺️</span>
-        <h3>Не удалось загрузить Яндекс Карты</h3>
+        <h3>Не удалось загрузить карту</h3>
         <p>{{ mapError }}</p>
-        <p class="map-error__hint">Проверьте API-ключ в .env или откройте DevTools (F12) для деталей</p>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted } from 'vue'
 import api from '../api/client'
 
 const mapEl = ref<HTMLElement>()
@@ -76,9 +73,9 @@ const mapError = ref('')
 const groupFilter = ref('')
 const statusFilter = ref('confirmed')
 
-let ymaps3: any = null
+let ymaps: any = null
 let map: any = null
-let markerLayer: any = null
+let clusterer: any = null
 
 const GROUP_ICONS: Record<string, string> = { plants: '🌿', fungi: '🍄', insects: '🐛', herpetofauna: '🐍', birds: '🐦', mammals: '🦔' }
 function groupIcon(g: string) { return GROUP_ICONS[g] || '🌱' }
@@ -88,102 +85,86 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('ru', { day: 'numeric', month: 'short' })
 }
 
+function getMarkerColor(props: any): string {
+  if (props.is_incident) return '#E53935'
+  if (props.status === 'on_review') return '#FFC107'
+  return '#2A7A6E'
+}
+
 async function loadYmaps(apiKey: string): Promise<any> {
-  // If already loaded
-  if ((window as any).ymaps3) {
-    await (window as any).ymaps3.ready
-    return (window as any).ymaps3
+  if ((window as any).ymaps) {
+    return new Promise(resolve => (window as any).ymaps.ready(() => resolve((window as any).ymaps)))
   }
 
   return new Promise((resolve, reject) => {
     const script = document.createElement('script')
-    script.src = `https://api-maps.yandex.ru/v3/?apikey=${apiKey}&lang=ru_RU`
-    script.type = 'text/javascript'
+    script.src = `https://api-maps.yandex.ru/2.1/?apikey=${apiKey}&lang=ru_RU`
     script.async = true
 
     script.onload = () => {
-      // ymaps3 sets window.ymaps3 as a promise-like
-      const checkReady = () => {
-        const ym = (window as any).ymaps3
-        if (!ym) {
-          setTimeout(checkReady, 100)
-          return
-        }
-        if (typeof ym.ready?.then === 'function') {
-          ym.ready.then(() => resolve(ym)).catch(reject)
-        } else {
-          resolve(ym)
-        }
-      }
-      checkReady()
+      (window as any).ymaps.ready(() => resolve((window as any).ymaps))
     }
-
-    script.onerror = (e) => {
-      console.error('ymaps3 script load error:', e)
-      reject(new Error('Failed to load Yandex Maps script'))
-    }
-
+    script.onerror = () => reject(new Error('Не удалось загрузить скрипт Яндекс Карт'))
     document.head.appendChild(script)
   })
 }
 
 async function initMap(apiKey: string) {
   try {
-    ymaps3 = await loadYmaps(apiKey)
+    ymaps = await loadYmaps(apiKey)
 
-    const { YMap, YMapDefaultSchemeLayer, YMapDefaultFeaturesLayer, YMapMarker } = ymaps3
-
-    map = new YMap(mapEl.value!, {
-      location: {
-        center: [39.60, 52.59],
-        zoom: 13,
-      },
+    map = new ymaps.Map(mapEl.value!, {
+      center: [52.59, 39.60],
+      zoom: 13,
+      controls: ['zoomControl', 'typeSelector', 'fullscreenControl'],
     })
 
-    map.addChild(new YMapDefaultSchemeLayer({}))
-    map.addChild(new YMapDefaultFeaturesLayer({}))
+    // Clusterer for observation points
+    clusterer = new ymaps.Clusterer({
+      preset: 'islands#greenClusterIcons',
+      clusterDisableClickZoom: false,
+      clusterBalloonContentLayout: 'cluster#balloonCarousel',
+    })
+    map.geoObjects.add(clusterer)
 
     mapLoading.value = false
     await updateMarkers()
   } catch (e: any) {
-    console.error('Failed to init Yandex Maps:', e)
-    mapError.value = e?.message || 'Ошибка загрузки API'
+    console.error('Map init error:', e)
+    mapError.value = e?.message || 'Ошибка инициализации карты'
     mapLoading.value = false
   }
 }
 
 async function updateMarkers() {
-  if (!map || !ymaps3) return
+  if (!map || !ymaps || !clusterer) return
 
-  const { YMapMarker } = ymaps3
+  clusterer.removeAll()
 
-  // Remove old markers
-  if (markerLayer && markerLayer.length) {
-    markerLayer.forEach((m: any) => {
-      try { map.removeChild(m) } catch {}
-    })
-  }
-  markerLayer = []
-
-  for (const p of points.value) {
+  const placemarks = points.value.map(p => {
     const [lon, lat] = p.geometry.coordinates
-    const el = document.createElement('div')
-    el.className = 'ymap-marker'
-    if (p.properties.is_incident) {
-      el.classList.add('ymap-marker--incident')
-    } else if (p.properties.status === 'on_review') {
-      el.classList.add('ymap-marker--review')
-    }
-    el.innerHTML = groupIcon(p.properties.group)
-    el.title = `#${p.properties.id} — ${p.properties.group}`
+    const color = getMarkerColor(p.properties)
+    const icon = groupIcon(p.properties.group)
 
-    const marker = new YMapMarker(
-      { coordinates: [lon, lat] },
-      el
+    const placemark = new ymaps.Placemark(
+      [lat, lon],
+      {
+        balloonContentHeader: `${icon} Наблюдение #${p.properties.id}`,
+        balloonContentBody: `Группа: ${p.properties.group}<br>Статус: ${p.properties.status}`,
+        hintContent: `${icon} #${p.properties.id}`,
+      },
+      {
+        preset: p.properties.is_incident
+          ? 'islands#redCircleDotIcon'
+          : p.properties.status === 'on_review'
+            ? 'islands#yellowCircleDotIcon'
+            : 'islands#greenCircleDotIcon',
+      }
     )
-    map.addChild(marker)
-    markerLayer.push(marker)
-  }
+    return placemark
+  })
+
+  clusterer.add(placemarks)
 }
 
 async function fetchPoints() {
@@ -205,11 +186,11 @@ onMounted(async () => {
     if (data.apiKey) {
       await initMap(data.apiKey)
     } else {
-      mapError.value = 'API-ключ не настроен (YMAPS_API_KEY в .env)'
+      mapError.value = 'API-ключ не настроен'
       mapLoading.value = false
     }
-  } catch (e: any) {
-    mapError.value = 'Не удалось получить конфигурацию карт'
+  } catch {
+    mapError.value = 'Не удалось получить конфигурацию'
     mapLoading.value = false
   }
   await fetchPoints()
@@ -273,7 +254,6 @@ onMounted(async () => {
 .point-status--on_review { background: var(--yellow-potential); }
 .no-points { text-align: center; padding: 20px; color: var(--slate-light); font-size: 13px; }
 
-/* Map */
 .map-container { position: relative; }
 #ymap { width: 100%; height: 100%; }
 .map-loading, .map-error {
@@ -286,39 +266,9 @@ onMounted(async () => {
 }
 .map-error h3 { font-family: var(--font-display); font-size: 20px; color: var(--slate-deep); }
 .map-error p { font-size: 14px; }
-.map-error__hint { font-size: 12px; color: var(--slate-light); margin-top: 8px; }
 
 @media (max-width: 768px) {
   .map-page { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .map-sidebar { max-height: 40vh; }
-}
-</style>
-
-<style>
-/* Global marker styles (not scoped — injected into map DOM) */
-.ymap-marker {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: #2A7A6E;
-  border: 3px solid white;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  cursor: pointer;
-  transform: translate(-50%, -50%);
-  transition: transform 0.2s;
-}
-.ymap-marker:hover {
-  transform: translate(-50%, -50%) scale(1.2);
-  z-index: 10;
-}
-.ymap-marker--incident {
-  background: #E53935;
-}
-.ymap-marker--review {
-  background: #FFC107;
 }
 </style>
