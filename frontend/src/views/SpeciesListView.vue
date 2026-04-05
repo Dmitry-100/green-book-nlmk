@@ -30,10 +30,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import api from '../api/client'
 import SpeciesCard from '../components/SpeciesCard.vue'
 
+const route = useRoute()
 const species = ref<any[]>([])
 const total = ref(0)
 const loading = ref(false)
@@ -44,7 +46,7 @@ let debounceTimer: ReturnType<typeof setTimeout>
 
 async function fetchSpecies() {
   loading.value = true
-  const params: any = {}
+  const params: any = { limit: 200 }
   if (groupFilter.value) params.group = groupFilter.value
   if (categoryFilter.value) params.category = categoryFilter.value
   if (search.value && search.value.length >= 2) params.search = search.value
@@ -59,7 +61,18 @@ function debouncedFetch() {
   debounceTimer = setTimeout(fetchSpecies, 300)
 }
 
-onMounted(fetchSpecies)
+// Read group filter from URL query param
+watch(() => route.query.group, (val) => {
+  groupFilter.value = (val as string) || ''
+  fetchSpecies()
+})
+
+onMounted(() => {
+  if (route.query.group) {
+    groupFilter.value = route.query.group as string
+  }
+  fetchSpecies()
+})
 </script>
 
 <style scoped>
