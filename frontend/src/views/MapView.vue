@@ -88,31 +88,48 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('ru', { day: 'numeric', month: 'short' })
 }
 
-async function loadYmaps(apiKey: string) {
-  if ((window as any).ymaps3) return
-  return new Promise<void>((resolve, reject) => {
+async function loadYmaps(apiKey: string): Promise<any> {
+  // If already loaded
+  if ((window as any).ymaps3) {
+    await (window as any).ymaps3.ready
+    return (window as any).ymaps3
+  }
+
+  return new Promise((resolve, reject) => {
     const script = document.createElement('script')
     script.src = `https://api-maps.yandex.ru/v3/?apikey=${apiKey}&lang=ru_RU`
-    script.onload = async () => {
-      // ymaps3 v3 uses top-level await internally; wait for it
-      const ym = (window as any).ymaps3
-      if (ym && ym.ready) {
-        await ym.ready
+    script.type = 'text/javascript'
+    script.async = true
+
+    script.onload = () => {
+      // ymaps3 sets window.ymaps3 as a promise-like
+      const checkReady = () => {
+        const ym = (window as any).ymaps3
+        if (!ym) {
+          setTimeout(checkReady, 100)
+          return
+        }
+        if (typeof ym.ready?.then === 'function') {
+          ym.ready.then(() => resolve(ym)).catch(reject)
+        } else {
+          resolve(ym)
+        }
       }
-      resolve()
+      checkReady()
     }
+
     script.onerror = (e) => {
       console.error('ymaps3 script load error:', e)
-      reject(e)
+      reject(new Error('Failed to load Yandex Maps script'))
     }
+
     document.head.appendChild(script)
   })
 }
 
 async function initMap(apiKey: string) {
   try {
-    await loadYmaps(apiKey)
-    ymaps3 = (window as any).ymaps3
+    ymaps3 = await loadYmaps(apiKey)
 
     const { YMap, YMapDefaultSchemeLayer, YMapDefaultFeaturesLayer, YMapMarker } = ymaps3
 
