@@ -22,6 +22,16 @@ const router = createRouter({
           name: 'species-detail',
           component: () => import('../views/SpeciesDetailView.vue'),
         },
+        {
+          path: 'observe',
+          name: 'observe',
+          component: () => import('../views/ObserveView.vue'),
+        },
+        {
+          path: 'my',
+          name: 'my-observations',
+          component: () => import('../views/MyObservationsView.vue'),
+        },
       ],
     },
   ],
