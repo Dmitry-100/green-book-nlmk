@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     auth_secret_key: str = "dev-secret-key-change-in-production"
     auth_algorithm: str = "HS256"
     app_env: str = "development"
+    ymaps_api_key: str = ""
 
     model_config = {"env_file": ".env"}
 

@@ -37,7 +37,7 @@
       </div>
       <div class="map-points-list">
         <h3>Наблюдения</h3>
-        <div v-for="p in points" :key="p.properties.id" class="point-item" @click="selectedPoint = p">
+        <div v-for="p in points" :key="p.properties.id" class="point-item">
           <span class="point-icon">{{ groupIcon(p.properties.group) }}</span>
           <div class="point-info">
             <span class="point-id">#{{ p.properties.id }}</span>
@@ -51,38 +51,27 @@
       </div>
     </div>
     <div class="map-container">
-      <div class="map-placeholder-full">
-        <div class="map-overlay">
-          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3">
-            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-            <circle cx="12" cy="10" r="3"/>
-          </svg>
-          <h3>Яндекс Карты</h3>
-          <p>Промплощадка ПАО «НЛМК»</p>
-          <p class="coords">52.6°N, 39.6°E — Липецк</p>
-          <p class="map-note">Для подключения Яндекс Карт API v3 необходим API-ключ.<br>Добавьте YMAPS_API_KEY в .env и раскомментируйте инициализацию в коде.</p>
-          <div class="map-dots">
-            <div v-for="p in points.slice(0, 20)" :key="p.properties.id"
-                 class="map-dot"
-                 :class="{ 'map-dot--incident': p.properties.is_incident }"
-                 :style="dotStyle(p)"
-                 :title="'#' + p.properties.id"
-            ></div>
-          </div>
-        </div>
+      <div id="ymap" ref="mapEl"></div>
+      <div v-if="mapLoading" class="map-loading">
+        <span>Загрузка карты...</span>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import api from '../api/client'
 
+const mapEl = ref<HTMLElement>()
 const points = ref<any[]>([])
-const selectedPoint = ref<any>(null)
+const mapLoading = ref(true)
 const groupFilter = ref('')
 const statusFilter = ref('confirmed')
+
+let ymaps3: any = null
+let map: any = null
+let markerLayer: any = null
 
 const GROUP_ICONS: Record<string, string> = { plants: '🌿', fungi: '🍄', insects: '🐛', herpetofauna: '🐍', birds: '🐦', mammals: '🦔' }
 function groupIcon(g: string) { return GROUP_ICONS[g] || '🌱' }
@@ -92,12 +81,79 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('ru', { day: 'numeric', month: 'short' })
 }
 
-function dotStyle(point: any) {
-  // Pseudo-random position based on coordinates for visual representation
-  const [lon, lat] = point.geometry.coordinates
-  const x = ((lon - 39.5) * 800 + 100) % 90 + 5
-  const y = ((52.7 - lat) * 800 + 100) % 80 + 10
-  return { left: x + '%', top: y + '%' }
+async function loadYmaps(apiKey: string) {
+  return new Promise<void>((resolve, reject) => {
+    if ((window as any).ymaps3) {
+      resolve()
+      return
+    }
+    const script = document.createElement('script')
+    script.src = `https://api-maps.yandex.ru/v3/?apikey=${apiKey}&lang=ru_RU`
+    script.onload = () => {
+      (window as any).ymaps3.ready.then(() => resolve())
+    }
+    script.onerror = reject
+    document.head.appendChild(script)
+  })
+}
+
+async function initMap(apiKey: string) {
+  try {
+    await loadYmaps(apiKey)
+    ymaps3 = (window as any).ymaps3
+
+    const { YMap, YMapDefaultSchemeLayer, YMapDefaultFeaturesLayer, YMapMarker } = ymaps3
+
+    map = new YMap(mapEl.value!, {
+      location: {
+        center: [39.60, 52.59],
+        zoom: 13,
+      },
+    })
+
+    map.addChild(new YMapDefaultSchemeLayer({}))
+    map.addChild(new YMapDefaultFeaturesLayer({}))
+
+    mapLoading.value = false
+    await updateMarkers()
+  } catch (e) {
+    console.error('Failed to init Yandex Maps:', e)
+    mapLoading.value = false
+  }
+}
+
+async function updateMarkers() {
+  if (!map || !ymaps3) return
+
+  const { YMapMarker } = ymaps3
+
+  // Remove old markers
+  if (markerLayer && markerLayer.length) {
+    markerLayer.forEach((m: any) => {
+      try { map.removeChild(m) } catch {}
+    })
+  }
+  markerLayer = []
+
+  for (const p of points.value) {
+    const [lon, lat] = p.geometry.coordinates
+    const el = document.createElement('div')
+    el.className = 'ymap-marker'
+    if (p.properties.is_incident) {
+      el.classList.add('ymap-marker--incident')
+    } else if (p.properties.status === 'on_review') {
+      el.classList.add('ymap-marker--review')
+    }
+    el.innerHTML = groupIcon(p.properties.group)
+    el.title = `#${p.properties.id} — ${p.properties.group}`
+
+    const marker = new YMapMarker(
+      { coordinates: [lon, lat] },
+      el
+    )
+    map.addChild(marker)
+    markerLayer.push(marker)
+  }
 }
 
 async function fetchPoints() {
@@ -107,12 +163,25 @@ async function fetchPoints() {
     if (statusFilter.value) params.status = statusFilter.value
     const { data } = await api.get('/map/observations', { params })
     points.value = data.features || []
+    await updateMarkers()
   } catch {
     points.value = []
   }
 }
 
-onMounted(fetchPoints)
+onMounted(async () => {
+  try {
+    const { data } = await api.get('/config/ymaps')
+    if (data.apiKey) {
+      await initMap(data.apiKey)
+    } else {
+      mapLoading.value = false
+    }
+  } catch {
+    mapLoading.value = false
+  }
+  await fetchPoints()
+})
 </script>
 
 <style scoped>
@@ -172,32 +241,48 @@ onMounted(fetchPoints)
 .point-status--on_review { background: var(--yellow-potential); }
 .no-points { text-align: center; padding: 20px; color: var(--slate-light); font-size: 13px; }
 
-/* Map area */
-.map-container { position: relative; background: #c8d6db; }
-.map-placeholder-full {
+/* Map */
+.map-container { position: relative; }
+#ymap { width: 100%; height: 100%; }
+.map-loading {
   position: absolute; top: 0; left: 0; right: 0; bottom: 0;
   display: flex; align-items: center; justify-content: center;
-  background:
-    linear-gradient(135deg, #b8ccd3 0%, #9fb8bf 30%, #a8c0c6 60%, #c0d2d8 100%);
+  background: var(--slate-bg);
+  color: var(--slate-mid);
+  font-size: 16px;
 }
-.map-overlay {
-  text-align: center; color: var(--slate-mid);
-  position: relative; z-index: 2;
-}
-.map-overlay h3 { font-family: var(--font-display); font-size: 24px; color: var(--slate-deep); margin-top: 12px; }
-.map-overlay p { font-size: 14px; margin-top: 4px; }
-.map-overlay .coords { font-family: monospace; font-size: 13px; color: var(--slate-light); margin-top: 8px; }
-.map-overlay .map-note { font-size: 12px; color: var(--slate-light); margin-top: 16px; max-width: 400px; line-height: 1.6; }
-.map-dots { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; }
-.map-dot {
-  position: absolute; width: 10px; height: 10px; border-radius: 50%;
-  background: var(--teal); border: 2px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-  transform: translate(-50%, -50%);
-}
-.map-dot--incident { background: var(--red-reference); }
 
 @media (max-width: 768px) {
   .map-page { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .map-sidebar { max-height: 40vh; }
+}
+</style>
+
+<style>
+/* Global marker styles (not scoped — injected into map DOM) */
+.ymap-marker {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #2A7A6E;
+  border: 3px solid white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  cursor: pointer;
+  transform: translate(-50%, -50%);
+  transition: transform 0.2s;
+}
+.ymap-marker:hover {
+  transform: translate(-50%, -50%) scale(1.2);
+  z-index: 10;
+}
+.ymap-marker--incident {
+  background: #E53935;
+}
+.ymap-marker--review {
+  background: #FFC107;
 }
 </style>
