@@ -79,8 +79,8 @@
       </div>
       <div class="species-grid">
         <div v-for="s in recentSpecies" :key="s.id" class="species-card" @click="$router.push(`/species/${s.id}`)">
-          <div class="species-card__img">
-            <div class="species-card__no-photo">{{ groupIcon(s.group) }}</div>
+          <div class="species-card__img" :style="s.photo_urls?.length ? { backgroundImage: `url(${s.photo_urls[0]})` } : {}">
+            <div v-if="!s.photo_urls?.length" class="species-card__no-photo">{{ groupIcon(s.group) }}</div>
             <div class="species-card__status" :class="statusClass(s.category)"></div>
             <div v-if="s.is_poisonous" class="species-card__poison">&#9888;</div>
           </div>
