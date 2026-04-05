@@ -45,10 +45,11 @@
     <!-- Quick Actions -->
     <div class="section">
       <div class="quick-grid">
-        <router-link v-for="g in groups" :key="g.value" :to="`/species?group=${g.value}`" class="quick-card">
-          <div class="quick-card__icon">{{ g.icon }}</div>
-          <div class="quick-card__title">{{ g.label }}</div>
-          <div class="quick-card__desc">{{ g.count }} видов</div>
+        <router-link v-for="g in groups" :key="g.value" :to="`/species?group=${g.value}`" class="quick-card" :style="{ backgroundImage: `linear-gradient(to top, rgba(27,77,79,0.85) 0%, rgba(27,77,79,0.4) 50%, transparent 100%), url(${g.photo})` }">
+          <div class="quick-card__content">
+            <div class="quick-card__title">{{ g.label }}</div>
+            <div class="quick-card__desc">{{ g.count }} видов</div>
+          </div>
         </router-link>
       </div>
     </div>
@@ -106,12 +107,12 @@ const stats = reactive({ species: 0, confirmed: 0, on_review: 0, total_obs: 0 })
 const recentSpecies = ref<any[]>([])
 
 const groups = [
-  { value: 'plants', icon: '🌿', label: 'Растения', count: 0 },
-  { value: 'fungi', icon: '🍄', label: 'Грибы', count: 0 },
-  { value: 'insects', icon: '🐛', label: 'Насекомые', count: 0 },
-  { value: 'birds', icon: '🐦', label: 'Птицы', count: 0 },
-  { value: 'herpetofauna', icon: '🐍', label: 'Герпетофауна', count: 0 },
-  { value: 'mammals', icon: '🦔', label: 'Млекопитающие', count: 0 },
+  { value: 'plants', icon: '🌿', label: 'Растения', count: 0, photo: '/api/media/species-pdf/page05_img02.png' },
+  { value: 'fungi', icon: '🍄', label: 'Грибы', count: 0, photo: '/api/media/species-pdf/page12_img00.png' },
+  { value: 'insects', icon: '🐛', label: 'Насекомые', count: 0, photo: '/api/media/species-pdf/page20_img04.png' },
+  { value: 'birds', icon: '🐦', label: 'Птицы', count: 0, photo: '/api/media/species-pdf/page23_img07.png' },
+  { value: 'herpetofauna', icon: '🐍', label: 'Герпетофауна', count: 0, photo: '/api/media/species-pdf/page21_img03.png' },
+  { value: 'mammals', icon: '🦔', label: 'Млекопитающие', count: 0, photo: '/api/media/species-pdf/page29_img00.png' },
 ]
 
 const GROUP_ICONS: Record<string, string> = { plants: '🌿', fungi: '🍄', insects: '🐛', herpetofauna: '🐍', birds: '🐦', mammals: '🦔' }
@@ -348,21 +349,29 @@ onMounted(async () => {
   gap: 12px;
 }
 .quick-card {
-  background: var(--white);
   border-radius: var(--radius-md);
-  padding: 20px;
+  padding: 0;
   text-align: center;
   box-shadow: var(--shadow-card);
   cursor: pointer;
   transition: all 0.3s;
   text-decoration: none;
-  border: 1.5px solid transparent;
-  color: var(--slate-deep);
+  overflow: hidden;
+  background-size: cover;
+  background-position: center;
+  aspect-ratio: 1.2;
+  display: flex;
+  align-items: flex-end;
+  position: relative;
 }
-.quick-card:hover { border-color: var(--teal); box-shadow: var(--shadow-hover); transform: translateY(-2px); }
-.quick-card__icon { font-size: 32px; margin-bottom: 10px; }
-.quick-card__title { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
-.quick-card__desc { font-size: 12px; color: var(--slate-mid); }
+.quick-card:hover { box-shadow: var(--shadow-hover); transform: translateY(-4px); }
+.quick-card__content {
+  width: 100%;
+  padding: 16px;
+  text-align: left;
+}
+.quick-card__title { font-size: 15px; font-weight: 700; color: white; margin-bottom: 2px; }
+.quick-card__desc { font-size: 12px; color: rgba(255,255,255,0.75); }
 
 /* Spotlight */
 .spotlight {
