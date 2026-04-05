@@ -32,6 +32,11 @@ const router = createRouter({
           name: 'my-observations',
           component: () => import('../views/MyObservationsView.vue'),
         },
+        {
+          path: 'expert',
+          name: 'expert-queue',
+          component: () => import('../views/ExpertQueueView.vue'),
+        },
       ],
     },
   ],
