@@ -7,6 +7,7 @@ from app.routers import export as export_router
 from app.routers import map as map_router
 from app.routers import admin as admin_router
 from app.routers import media_serve
+from app.routers import gamification
 
 app = FastAPI(title="Green Book NLMK API", version="0.1.0")
 
@@ -28,6 +29,7 @@ app.include_router(export_router.router)
 app.include_router(map_router.router)
 app.include_router(admin_router.router)
 app.include_router(media_serve.router)
+app.include_router(gamification.router)
 
 from app.config import settings
 if settings.app_env == "development":

@@ -4,6 +4,10 @@ from app.models.observation import Observation, ObsMedia
 from app.models.site_zone import SiteZone
 from app.models.notification import Notification
 from app.models.decision_tree import DecisionTreeNode
+from app.models.gamification import (
+    Achievement, UserAchievement, UserPoints, SpeciesFirstDiscovery,
+    ObservationComment, ObservationLike,
+)
 
 __all__ = [
     "User",
@@ -13,4 +17,10 @@ __all__ = [
     "SiteZone",
     "Notification",
     "DecisionTreeNode",
+    "Achievement",
+    "UserAchievement",
+    "UserPoints",
+    "SpeciesFirstDiscovery",
+    "ObservationComment",
+    "ObservationLike",
 ]
