@@ -55,19 +55,18 @@
     </div>
 
     <!-- Species of the Month -->
-    <div class="section">
+    <div class="section" v-if="spotlight">
       <div class="section-header">
         <h2 class="section-title">Вид месяца</h2>
       </div>
-      <div class="spotlight">
-        <div class="spotlight__img">
-          <span class="spotlight__label">Апрель 2026</span>
-        </div>
+      <div class="spotlight" :style="{ backgroundImage: spotlight.photo_urls?.length ? `linear-gradient(to right, rgba(27,77,79,0.92) 0%, rgba(27,77,79,0.75) 45%, rgba(27,77,79,0.2) 100%), url(${spotlight.photo_urls[0]})` : '' }">
         <div class="spotlight__body">
-          <h3 class="spotlight__name">Лебедь-шипун</h3>
-          <div class="spotlight__latin">Cygnus olor</div>
-          <p class="spotlight__desc">Крупная водоплавающая птица семейства утиных. Размах крыльев до 240 см. Встречается на водоёмах вблизи промплощадки. Занесён в Красную книгу Липецкой области.</p>
-          <router-link to="/species" class="btn btn-outline-dark">Подробнее о виде</router-link>
+          <span class="spotlight__label">Апрель 2026</span>
+          <h3 class="spotlight__name">{{ spotlight.name_ru }}</h3>
+          <div class="spotlight__latin">{{ spotlight.name_latin }}</div>
+          <p class="spotlight__desc" v-if="spotlight.conservation_status">{{ spotlight.conservation_status }}</p>
+          <p class="spotlight__desc" v-if="spotlight.do_dont_rules">{{ spotlight.do_dont_rules }}</p>
+          <router-link :to="`/species/${spotlight.id}`" class="btn btn-spotlight">Подробнее о виде &rarr;</router-link>
         </div>
       </div>
     </div>
@@ -105,6 +104,7 @@ import api from '../api/client'
 
 const stats = reactive({ species: 0, confirmed: 0, on_review: 0, total_obs: 0 })
 const recentSpecies = ref<any[]>([])
+const spotlight = ref<any>(null)
 
 const groups = [
   { value: 'plants', icon: '🌿', label: 'Растения', count: 0, photo: '/api/media/species-pdf/page05_img02.png' },
@@ -133,6 +133,13 @@ onMounted(async () => {
     recentSpecies.value = data.items.slice(0, 8)
     for (const g of groups) {
       g.count = data.items.filter((s: any) => s.group === g.value).length
+    }
+    // Pick a spotlight species — one with photo, conservation status, and do_dont_rules
+    const candidates = data.items.filter((s: any) => s.photo_urls?.length && s.conservation_status)
+    if (candidates.length) {
+      spotlight.value = candidates[Math.floor(Math.random() * candidates.length)]
+    } else if (data.items.length) {
+      spotlight.value = data.items.find((s: any) => s.photo_urls?.length) || data.items[0]
     }
   } catch {}
   try {
@@ -375,34 +382,52 @@ onMounted(async () => {
 
 /* Spotlight */
 .spotlight {
-  background: var(--white);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  box-shadow: var(--shadow-card);
-  display: grid;
-  grid-template-columns: 280px 1fr;
-}
-.spotlight__img {
-  background: url('https://upload.wikimedia.org/wikipedia/commons/thumb/0/04/Cygnus_olor_2_%28Marek_Szczepanek%29.jpg/640px-Cygnus_olor_2_%28Marek_Szczepanek%29.jpg') center/cover;
+  box-shadow: var(--shadow-hover);
+  background-size: cover;
+  background-position: center;
+  min-height: 280px;
+  display: flex;
+  align-items: center;
   position: relative;
-  min-height: 240px;
+  transition: transform 0.3s;
+}
+.spotlight:hover { transform: scale(1.005); }
+.spotlight__body {
+  padding: 40px 48px;
+  max-width: 550px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 .spotlight__label {
-  position: absolute;
-  top: 16px; left: 16px;
-  background: rgba(42,122,110,0.9);
-  color: white;
-  padding: 4px 12px;
+  display: inline-block;
+  width: fit-content;
+  background: rgba(255,255,255,0.15);
+  color: rgba(255,255,255,0.9);
+  padding: 4px 14px;
   border-radius: 20px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.5px;
+  letter-spacing: 1px;
   text-transform: uppercase;
+  margin-bottom: 12px;
+  backdrop-filter: blur(4px);
 }
-.spotlight__body { padding: 28px; display: flex; flex-direction: column; justify-content: center; }
-.spotlight__name { font-family: var(--font-display); font-size: 28px; font-weight: 700; color: var(--teal-dark); }
-.spotlight__latin { font-family: var(--font-display); font-style: italic; font-size: 16px; color: var(--slate-mid); margin-bottom: 12px; }
-.spotlight__desc { font-size: 14px; color: var(--slate-mid); line-height: 1.7; margin-bottom: 16px; }
+.spotlight__name { font-family: var(--font-display); font-size: 34px; font-weight: 700; color: white; text-shadow: 0 2px 12px rgba(0,0,0,0.2); }
+.spotlight__latin { font-family: var(--font-display); font-style: italic; font-size: 18px; color: rgba(255,255,255,0.75); margin-bottom: 8px; }
+.spotlight__desc { font-size: 14px; color: rgba(255,255,255,0.8); line-height: 1.6; margin-bottom: 12px; }
+.btn-spotlight {
+  display: inline-flex; width: fit-content;
+  padding: 10px 22px; border-radius: 6px;
+  background: rgba(255,255,255,0.15); color: white;
+  border: 1px solid rgba(255,255,255,0.3);
+  font-size: 14px; font-weight: 600;
+  text-decoration: none; backdrop-filter: blur(4px);
+  transition: all 0.2s; margin-top: 8px;
+}
+.btn-spotlight:hover { background: rgba(255,255,255,0.25); }
 
 /* Species Grid */
 .species-grid {
