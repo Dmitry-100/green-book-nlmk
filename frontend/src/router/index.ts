@@ -12,6 +12,16 @@ const router = createRouter({
           name: 'home',
           component: () => import('../views/HomeView.vue'),
         },
+        {
+          path: 'species',
+          name: 'species-list',
+          component: () => import('../views/SpeciesListView.vue'),
+        },
+        {
+          path: 'species/:id',
+          name: 'species-detail',
+          component: () => import('../views/SpeciesDetailView.vue'),
+        },
       ],
     },
   ],
