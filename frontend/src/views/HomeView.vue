@@ -2,7 +2,7 @@
   <div class="home">
     <!-- Hero with swan -->
     <div class="hero">
-      <div class="hero__bg"></div>
+      <div class="hero__bg" :style="{ backgroundImage: 'url(/img/swan-hero.png)' }"></div>
       <div class="hero__gradient-left"></div>
       <div class="hero__nlmk-badge">НЛМК</div>
       <div class="hero-content">
@@ -163,7 +163,6 @@ onMounted(async () => {
   position: absolute;
   top: 0; right: 0; bottom: 0;
   width: 65%;
-  background-image: url('/img/swan-hero.png');
   background-size: cover;
   background-position: center right;
   z-index: 1;
