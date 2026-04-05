@@ -1,7 +1,7 @@
 <template>
   <div class="observe-page">
-    <h1>Сообщить наблюдение</h1>
-    <p class="subtitle">Расскажите, что вы встретили на территории площадки</p>
+    <h1>{{ form.is_incident ? 'Сообщить об инциденте' : 'Сообщить наблюдение' }}</h1>
+    <p class="subtitle">{{ form.is_incident ? 'Раненое, погибшее животное или другая экстренная ситуация' : 'Расскажите, что вы встретили на территории площадки' }}</p>
     <div class="form-card">
       <div class="form-section">
         <div class="form-section__title">Что вы наблюдали? *</div>
@@ -77,7 +77,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import api from '../api/client'
 
 const router = useRouter()
@@ -92,14 +92,16 @@ const groups = [
   { value: 'mammals', icon: '🦔', label: 'Млекопитающее', photo: '/api/media/species-pdf/page29_img00.png' },
 ]
 
+const route = useRoute()
+
 const form = reactive({
-  group: '',
+  group: (route.query.group as string) || '',
   observed_at: new Date(),
   species_name: '',
   comment: '',
   lat: 52.6,
   lon: 39.6,
-  is_incident: false,
+  is_incident: route.query.incident === '1',
   incident_type: '',
   incident_severity: '',
   safety_checked: false,
