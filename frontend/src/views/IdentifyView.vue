@@ -20,19 +20,18 @@
     <div v-if="step === 2" class="step-card">
       <h2>Шаг 2: Похож ли на один из этих видов?</h2>
       <p class="step-hint">Группа: {{ selectedGroupLabel }}</p>
-      <div class="species-suggestions">
-        <div v-for="s in suggestions" :key="s.id" class="suggestion-item" @click="selectSpecies(s)">
-          <div class="suggestion-thumb" :style="s.photo_urls?.length ? { backgroundImage: `url(${s.photo_urls[0]})` } : {}">
-            <span v-if="!s.photo_urls?.length" class="suggestion-thumb__fallback">{{ s.is_poisonous ? '⚠️' : '🔍' }}</span>
+      <div class="species-grid">
+        <div v-for="s in suggestions" :key="s.id" class="species-tile" @click="selectSpecies(s)">
+          <div class="species-tile__img" :style="s.photo_urls?.length ? { backgroundImage: `url(${s.photo_urls[0]})` } : {}">
+            <div v-if="!s.photo_urls?.length" class="species-tile__fallback">🔍</div>
+            <div class="species-tile__badges">
+              <span v-if="s.is_poisonous" class="tile-badge tile-badge--poison">Ядовит</span>
+              <span v-if="s.conservation_status" class="tile-badge tile-badge--redbook">КК</span>
+            </div>
           </div>
-          <div class="suggestion-info">
+          <div class="species-tile__body">
             <strong>{{ s.name_ru }}</strong>
-            <span class="latin">{{ s.name_latin }}</span>
-            <span v-if="s.description" class="suggestion-desc">{{ s.description.slice(0, 80) }}...</span>
-          </div>
-          <div class="suggestion-badges">
-            <span v-if="s.is_poisonous" class="poison-tag">Ядовит</span>
-            <span v-if="s.conservation_status" class="redbook-tag">КК</span>
+            <span class="species-tile__latin">{{ s.name_latin }}</span>
           </div>
         </div>
       </div>
@@ -110,18 +109,28 @@ function createWithUnknown() {
 .id-group-card:hover { transform: translateY(-4px); box-shadow: 0 8px 32px rgba(44,62,74,0.2); }
 .id-group-card__content { width: 100%; padding: 20px; }
 .id-group-card__label { font-size: 16px; font-weight: 700; color: white; text-transform: uppercase; letter-spacing: 0.5px; }
-.species-suggestions { max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
-.suggestion-item { display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-radius: 12px; cursor: pointer; transition: all 0.2s; border: 1px solid transparent; }
-.suggestion-item:hover { background: rgba(42,122,110,0.04); border-color: var(--slate-wash); transform: translateX(4px); }
-.suggestion-thumb { width: 56px; height: 56px; border-radius: 10px; background-size: cover; background-position: center; background-color: #D6E0E3; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
-.suggestion-thumb__fallback { font-size: 24px; opacity: 0.4; }
-.suggestion-info { flex: 1; }
-.suggestion-info strong { display: block; font-size: 14px; color: #2C3E4A; }
-.suggestion-info .latin { font-style: italic; font-size: 12px; color: #8FA5AB; display: block; }
-.suggestion-desc { font-size: 11px; color: #8FA5AB; display: block; margin-top: 4px; line-height: 1.4; }
-.suggestion-badges { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
-.redbook-tag { font-size: 9px; font-weight: 700; color: #E53935; background: rgba(229,57,53,0.1); padding: 2px 8px; border-radius: 4px; text-align: center; }
-.poison-tag { font-size: 9px; font-weight: 700; color: #E65100; background: rgba(255,152,0,0.1); padding: 2px 8px; border-radius: 4px; text-align: center; }
+.species-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px;
+  max-height: 500px; overflow-y: auto; padding: 4px;
+}
+.species-tile {
+  background: #FAFBFC; border-radius: 12px; overflow: hidden;
+  box-shadow: 0 2px 8px rgba(44,62,74,0.06); cursor: pointer;
+  transition: all 0.3s; border: 2px solid transparent;
+}
+.species-tile:hover { border-color: #2A7A6E; box-shadow: 0 6px 24px rgba(44,62,74,0.12); transform: translateY(-3px); }
+.species-tile__img {
+  height: 140px; background-size: cover; background-position: center;
+  background-color: #D6E0E3; position: relative;
+}
+.species-tile__fallback { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 40px; opacity: 0.25; }
+.species-tile__badges { position: absolute; top: 6px; right: 6px; display: flex; gap: 4px; }
+.tile-badge { padding: 2px 8px; border-radius: 4px; font-size: 9px; font-weight: 700; backdrop-filter: blur(4px); }
+.tile-badge--poison { background: rgba(255,152,0,0.85); color: white; }
+.tile-badge--redbook { background: rgba(229,57,53,0.85); color: white; }
+.species-tile__body { padding: 10px 12px; }
+.species-tile__body strong { display: block; font-size: 13px; color: #2C3E4A; margin-bottom: 2px; }
+.species-tile__latin { font-style: italic; font-size: 11px; color: #8FA5AB; font-family: 'Cormorant Garamond', serif; }
 .step-actions { display: flex; gap: 12px; margin-top: 24px; justify-content: flex-end; }
 .btn-primary { padding: 10px 20px; background: #2A7A6E; color: white; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; }
 .btn-primary:hover { background: #3DAA8E; }
