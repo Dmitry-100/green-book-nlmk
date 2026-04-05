@@ -26,3 +26,8 @@ app.include_router(identifier_router.router)
 app.include_router(export_router.router)
 app.include_router(map_router.router)
 app.include_router(admin_router.router)
+
+from app.config import settings
+if settings.app_env == "development":
+    from app.routers import dev_auth
+    app.include_router(dev_auth.router)
