@@ -4,6 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routers import health, species, observations, validation, notifications
 from app.routers import identifier as identifier_router
 from app.routers import export as export_router
+from app.routers import map as map_router
+from app.routers import admin as admin_router
 
 app = FastAPI(title="Green Book NLMK API", version="0.1.0")
 
@@ -22,3 +24,5 @@ app.include_router(validation.router)
 app.include_router(notifications.router)
 app.include_router(identifier_router.router)
 app.include_router(export_router.router)
+app.include_router(map_router.router)
+app.include_router(admin_router.router)
