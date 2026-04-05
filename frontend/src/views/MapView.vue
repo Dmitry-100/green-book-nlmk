@@ -55,6 +55,12 @@
       <div v-if="mapLoading" class="map-loading">
         <span>Загрузка карты...</span>
       </div>
+      <div v-if="mapError" class="map-error">
+        <span style="font-size: 48px; opacity: 0.3">🗺️</span>
+        <h3>Не удалось загрузить Яндекс Карты</h3>
+        <p>{{ mapError }}</p>
+        <p class="map-error__hint">Проверьте API-ключ в .env или откройте DevTools (F12) для деталей</p>
+      </div>
     </div>
   </div>
 </template>
@@ -66,6 +72,7 @@ import api from '../api/client'
 const mapEl = ref<HTMLElement>()
 const points = ref<any[]>([])
 const mapLoading = ref(true)
+const mapError = ref('')
 const groupFilter = ref('')
 const statusFilter = ref('confirmed')
 
@@ -82,17 +89,22 @@ function formatDate(iso: string) {
 }
 
 async function loadYmaps(apiKey: string) {
+  if ((window as any).ymaps3) return
   return new Promise<void>((resolve, reject) => {
-    if ((window as any).ymaps3) {
-      resolve()
-      return
-    }
     const script = document.createElement('script')
     script.src = `https://api-maps.yandex.ru/v3/?apikey=${apiKey}&lang=ru_RU`
-    script.onload = () => {
-      (window as any).ymaps3.ready.then(() => resolve())
+    script.onload = async () => {
+      // ymaps3 v3 uses top-level await internally; wait for it
+      const ym = (window as any).ymaps3
+      if (ym && ym.ready) {
+        await ym.ready
+      }
+      resolve()
     }
-    script.onerror = reject
+    script.onerror = (e) => {
+      console.error('ymaps3 script load error:', e)
+      reject(e)
+    }
     document.head.appendChild(script)
   })
 }
@@ -116,8 +128,9 @@ async function initMap(apiKey: string) {
 
     mapLoading.value = false
     await updateMarkers()
-  } catch (e) {
+  } catch (e: any) {
     console.error('Failed to init Yandex Maps:', e)
+    mapError.value = e?.message || 'Ошибка загрузки API'
     mapLoading.value = false
   }
 }
@@ -175,9 +188,11 @@ onMounted(async () => {
     if (data.apiKey) {
       await initMap(data.apiKey)
     } else {
+      mapError.value = 'API-ключ не настроен (YMAPS_API_KEY в .env)'
       mapLoading.value = false
     }
-  } catch {
+  } catch (e: any) {
+    mapError.value = 'Не удалось получить конфигурацию карт'
     mapLoading.value = false
   }
   await fetchPoints()
@@ -244,13 +259,17 @@ onMounted(async () => {
 /* Map */
 .map-container { position: relative; }
 #ymap { width: 100%; height: 100%; }
-.map-loading {
+.map-loading, .map-error {
   position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-  display: flex; align-items: center; justify-content: center;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
   background: var(--slate-bg);
   color: var(--slate-mid);
   font-size: 16px;
+  gap: 8px;
 }
+.map-error h3 { font-family: var(--font-display); font-size: 20px; color: var(--slate-deep); }
+.map-error p { font-size: 14px; }
+.map-error__hint { font-size: 12px; color: var(--slate-light); margin-top: 8px; }
 
 @media (max-width: 768px) {
   .map-page { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
