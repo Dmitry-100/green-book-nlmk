@@ -162,6 +162,7 @@ async function submit() {
 .zone-info { margin-top: 12px; padding: 10px 14px; background: rgba(42,122,110,0.06); border-radius: 6px; font-size: 13px; color: #1B4D4F; font-weight: 600; }
 .incident-fields { display: flex; gap: 12px; margin-top: 12px; }
 .safety-check { padding: 16px; background: rgba(255,152,0,0.06); border: 1px solid rgba(255,152,0,0.15); border-radius: 12px; }
+.safety-check :deep(.el-checkbox__label) { white-space: normal; word-break: break-word; line-height: 1.5; }
 .form-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
 @media (max-width: 768px) { .group-selector { grid-template-columns: repeat(3, 1fr); } .form-row { grid-template-columns: 1fr; } }
 </style>
