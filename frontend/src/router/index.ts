@@ -37,6 +37,11 @@ const router = createRouter({
           name: 'expert-queue',
           component: () => import('../views/ExpertQueueView.vue'),
         },
+        {
+          path: 'identify',
+          name: 'identify',
+          component: () => import('../views/IdentifyView.vue'),
+        },
       ],
     },
   ],
