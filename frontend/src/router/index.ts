@@ -63,9 +63,24 @@ const router = createRouter({
           component: () => import('../views/AdminView.vue'),
         },
         {
+          path: 'passport',
+          name: 'passport',
+          component: () => import('../views/EcoPassportView.vue'),
+        },
+        {
           path: 'profile',
           name: 'profile',
           component: () => import('../views/ProfileView.vue'),
+        },
+        {
+          path: 'quiz',
+          name: 'quiz',
+          component: () => import('../views/QuizView.vue'),
+        },
+        {
+          path: 'routes',
+          name: 'routes',
+          component: () => import('../views/RoutesView.vue'),
         },
       ],
     },

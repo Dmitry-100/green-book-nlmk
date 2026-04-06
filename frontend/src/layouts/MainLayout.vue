@@ -28,6 +28,9 @@
       <router-link to="/species" active-class="active">Виды</router-link>
       <router-link to="/identify" active-class="active">Определитель</router-link>
       <router-link to="/my" active-class="active">Мои наблюдения</router-link>
+      <router-link to="/quiz" active-class="active">Викторина</router-link>
+      <router-link to="/passport" active-class="active">Экопаспорт</router-link>
+      <router-link to="/routes" active-class="active">Маршруты</router-link>
       <router-link to="/help" active-class="active">Правила</router-link>
       <router-link to="/expert" active-class="active">Эколог</router-link>
       <router-link to="/admin" active-class="active">Админ</router-link>

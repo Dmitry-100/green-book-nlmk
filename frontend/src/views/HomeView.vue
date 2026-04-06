@@ -71,6 +71,21 @@
       </div>
     </div>
 
+    <!-- Fact of Day -->
+    <div class="section" v-if="factOfDay">
+      <div class="section-header">
+        <h2 class="section-title">Факт дня</h2>
+      </div>
+      <div class="fact-banner" :style="factOfDay.photo_url ? { backgroundImage: `linear-gradient(to right, rgba(27,77,79,0.92) 0%, rgba(27,77,79,0.7) 50%, transparent 100%), url(${factOfDay.photo_url})` } : {}">
+        <div class="fact-banner__body">
+          <h3>{{ factOfDay.name_ru }}</h3>
+          <div class="fact-banner__latin">{{ factOfDay.name_latin }}</div>
+          <p>{{ factOfDay.description?.slice(0, 200) }}{{ factOfDay.description?.length > 200 ? '...' : '' }}</p>
+          <router-link :to="`/species/${factOfDay.species_id}`" class="btn-spotlight">Подробнее &rarr;</router-link>
+        </div>
+      </div>
+    </div>
+
     <!-- Recent species -->
     <div class="section">
       <div class="section-header">
@@ -105,6 +120,7 @@ import api from '../api/client'
 const stats = reactive({ species: 0, confirmed: 0, on_review: 0, total_obs: 0 })
 const recentSpecies = ref<any[]>([])
 const spotlight = ref<any>(null)
+const factOfDay = ref<any>(null)
 
 const groups = [
   { value: 'plants', icon: '🌿', label: 'Растения', count: 0, photo: '/api/media/species-pdf/page05_img02.png' },
@@ -153,6 +169,10 @@ onMounted(async () => {
   try {
     const { data } = await api.get('/observations', { params: { status: 'on_review', limit: 1 } })
     stats.on_review = data.total
+  } catch {}
+  try {
+    const { data } = await api.get('/gamification/fact-of-day')
+    if (data.species_id) factOfDay.value = data
   } catch {}
 })
 </script>
@@ -428,6 +448,19 @@ onMounted(async () => {
   transition: all 0.2s; margin-top: 8px;
 }
 .btn-spotlight:hover { background: rgba(255,255,255,0.25); }
+
+/* Fact Banner */
+.fact-banner {
+  border-radius: var(--radius-lg); overflow: hidden; min-height: 200px;
+  background-size: cover; background-position: center right;
+  background-color: var(--teal-dark, #1B4D4F); display: flex; align-items: center;
+  box-shadow: var(--shadow-hover); transition: transform 0.3s;
+}
+.fact-banner:hover { transform: scale(1.003); }
+.fact-banner__body { padding: 32px 40px; max-width: 520px; }
+.fact-banner__body h3 { font-family: var(--font-display); font-size: 26px; color: white; margin-bottom: 2px; }
+.fact-banner__latin { font-family: var(--font-display); font-style: italic; color: rgba(255,255,255,0.7); margin-bottom: 12px; }
+.fact-banner__body p { font-size: 14px; color: rgba(255,255,255,0.85); line-height: 1.7; margin-bottom: 16px; }
 
 /* Species Grid */
 .species-grid {
