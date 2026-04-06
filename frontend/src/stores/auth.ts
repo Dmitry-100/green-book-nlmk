@@ -9,15 +9,17 @@ interface UserInfo {
 }
 
 export const useAuthStore = defineStore('auth', () => {
-  const token = ref<string | null>(null)
-  const user = ref<UserInfo | null>(null)
+  const token = ref<string | null>(localStorage.getItem('auth_token'))
+  const user = ref<UserInfo | null>(JSON.parse(localStorage.getItem('auth_user') || 'null'))
 
   function setToken(t: string) {
     token.value = t
+    localStorage.setItem('auth_token', t)
   }
 
   function setUser(u: UserInfo) {
     user.value = u
+    localStorage.setItem('auth_user', JSON.stringify(u))
   }
 
   function isEcologist() {
