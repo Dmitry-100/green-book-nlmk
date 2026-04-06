@@ -38,6 +38,11 @@ const router = createRouter({
           component: () => import('../views/MyObservationsView.vue'),
         },
         {
+          path: 'observations/:id',
+          name: 'observation-detail',
+          component: () => import('../views/ObservationDetailView.vue'),
+        },
+        {
           path: 'expert',
           name: 'expert-queue',
           component: () => import('../views/ExpertQueueView.vue'),

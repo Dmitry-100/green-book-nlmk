@@ -165,3 +165,94 @@ def get_upload_url(
 ):
     result = generate_upload_url(data.filename, data.content_type)
     return UploadUrlResponse(**result)
+
+
+# --- Comments & Likes ---
+from app.models.gamification import ObservationComment, ObservationLike
+from pydantic import BaseModel as PydanticBaseModel
+
+
+class CommentCreate(PydanticBaseModel):
+    text: str
+
+
+@router.get("/{obs_id}/comments")
+def list_comments(obs_id: int, db: Session = Depends(get_db)):
+    comments = db.query(ObservationComment).filter(
+        ObservationComment.observation_id == obs_id
+    ).order_by(ObservationComment.created_at.asc()).all()
+    result = []
+    for c in comments:
+        user = db.query(User).filter(User.id == c.user_id).first()
+        result.append({
+            "id": c.id,
+            "text": c.text,
+            "user_name": user.display_name if user else "Unknown",
+            "created_at": c.created_at.isoformat(),
+        })
+    return {"comments": result}
+
+
+@router.post("/{obs_id}/comments")
+def add_comment(
+    obs_id: int,
+    data: CommentCreate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    obs = db.query(Observation).filter(Observation.id == obs_id).first()
+    if not obs:
+        raise HTTPException(status_code=404, detail="Observation not found")
+    comment = ObservationComment(
+        observation_id=obs_id,
+        user_id=user.id,
+        text=data.text,
+    )
+    db.add(comment)
+    db.commit()
+    return {"id": comment.id, "text": comment.text, "user_name": user.display_name, "created_at": comment.created_at.isoformat()}
+
+
+@router.get("/{obs_id}/likes")
+def get_likes(obs_id: int, db: Session = Depends(get_db)):
+    count = db.query(ObservationLike).filter(ObservationLike.observation_id == obs_id).count()
+    return {"count": count, "observation_id": obs_id}
+
+
+@router.post("/{obs_id}/likes")
+def toggle_like(
+    obs_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    obs = db.query(Observation).filter(Observation.id == obs_id).first()
+    if not obs:
+        raise HTTPException(status_code=404, detail="Observation not found")
+    existing = db.query(ObservationLike).filter(
+        ObservationLike.observation_id == obs_id,
+        ObservationLike.user_id == user.id,
+    ).first()
+    if existing:
+        db.delete(existing)
+        db.commit()
+        liked = False
+    else:
+        db.add(ObservationLike(observation_id=obs_id, user_id=user.id))
+        db.commit()
+        liked = True
+    count = db.query(ObservationLike).filter(ObservationLike.observation_id == obs_id).count()
+    return {"liked": liked, "count": count}
+
+
+@router.get("/{obs_id}/likes/me")
+def my_like_status(
+    obs_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    existing = db.query(ObservationLike).filter(
+        ObservationLike.observation_id == obs_id,
+        ObservationLike.user_id == user.id,
+    ).first()
+    count = db.query(ObservationLike).filter(ObservationLike.observation_id == obs_id).count()
+    return {"liked": existing is not None, "count": count}

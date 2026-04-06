@@ -71,6 +71,25 @@
       </div>
     </div>
 
+    <!-- Monthly Challenge -->
+    <div class="section" v-if="challenge">
+      <div class="challenge-banner">
+        <div class="challenge-banner__photo" :style="{ backgroundImage: challenge.species.photo_url ? `url(${challenge.species.photo_url})` : '' }"></div>
+        <div class="challenge-banner__body">
+          <span class="challenge-badge">Челлендж {{ challenge.month }}</span>
+          <h3>Найдите: {{ challenge.species.name_ru }}</h3>
+          <div class="challenge-latin">{{ challenge.species.name_latin }}</div>
+          <div v-if="challenge.found" class="challenge-found">
+            Найден! Первым нашёл: <strong>{{ challenge.finder.display_name }}</strong>
+          </div>
+          <div v-else class="challenge-active">
+            Кто первый обнаружит этот вид — получит спецбейдж!
+          </div>
+          <router-link :to="`/species/${challenge.species.id}`" class="challenge-link">Узнать о виде &rarr;</router-link>
+        </div>
+      </div>
+    </div>
+
     <!-- Fact of Day -->
     <div class="section" v-if="factOfDay">
       <div class="section-header">
@@ -110,6 +129,25 @@
         </div>
       </div>
     </div>
+
+    <!-- News Feed -->
+    <div class="section" v-if="recentObs.length">
+      <div class="section-header">
+        <h2 class="section-title">Последние находки</h2>
+        <router-link to="/map" class="section-link">На карте &rarr;</router-link>
+      </div>
+      <div class="news-feed">
+        <router-link v-for="o in recentObs" :key="o.id" :to="`/observations/${o.id}`" class="news-item">
+          <div class="news-item__icon">{{ groupIcon(o.group) }}</div>
+          <div class="news-item__body">
+            <div class="news-item__title">{{ groupLabel(o.group) }}</div>
+            <div class="news-item__comment" v-if="o.comment">{{ o.comment.slice(0, 80) }}{{ o.comment.length > 80 ? '...' : '' }}</div>
+            <div class="news-item__date">{{ formatNewsDate(o.observed_at) }}</div>
+          </div>
+          <span class="news-item__badge">Подтверждено</span>
+        </router-link>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -121,6 +159,8 @@ const stats = reactive({ species: 0, confirmed: 0, on_review: 0, total_obs: 0 })
 const recentSpecies = ref<any[]>([])
 const spotlight = ref<any>(null)
 const factOfDay = ref<any>(null)
+const challenge = ref<any>(null)
+const recentObs = ref<any[]>([])
 
 const groups = [
   { value: 'plants', icon: '🌿', label: 'Растения', count: 0, photo: '/api/media/species-pdf/page05_img02.png' },
@@ -140,6 +180,11 @@ function statusClass(cat: string) {
   if (cat === 'red_book') return 'species-card__status--reference'
   if (cat === 'rare') return 'species-card__status--potential'
   return 'species-card__status--confirmed'
+}
+function formatNewsDate(iso: string) {
+  const d = new Date(iso)
+  const months = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}, ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`
 }
 
 onMounted(async () => {
@@ -173,6 +218,14 @@ onMounted(async () => {
   try {
     const { data } = await api.get('/gamification/fact-of-day')
     if (data.species_id) factOfDay.value = data
+  } catch {}
+  try {
+    const { data } = await api.get('/gamification/challenge')
+    if (data.species) challenge.value = data
+  } catch {}
+  try {
+    const { data } = await api.get('/observations', { params: { status: 'confirmed', limit: 5 } })
+    recentObs.value = data.items || []
   } catch {}
 })
 </script>
@@ -497,6 +550,39 @@ onMounted(async () => {
 .tag--group { background: rgba(42,122,110,0.1); color: var(--teal); }
 .tag--redbook { background: rgba(229,57,53,0.1); color: var(--red-reference); }
 
+/* News Feed */
+.news-feed { display: flex; flex-direction: column; gap: 8px; }
+.news-item {
+  display: grid; grid-template-columns: 48px 1fr auto; gap: 14px; align-items: center;
+  padding: 14px 18px; background: var(--white, #FAFBFC); border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(44,62,74,0.06); text-decoration: none; transition: all 0.2s;
+}
+.news-item:hover { box-shadow: 0 4px 16px rgba(44,62,74,0.12); transform: translateX(4px); }
+.news-item__icon { font-size: 28px; text-align: center; }
+.news-item__title { font-size: 14px; font-weight: 700; color: #2C3E4A; }
+.news-item__comment { font-size: 13px; color: #4A6572; margin-top: 2px; }
+.news-item__date { font-size: 11px; color: #8FA5AB; margin-top: 4px; }
+.news-item__badge { padding: 3px 10px; border-radius: 12px; font-size: 10px; font-weight: 700; background: rgba(76,175,80,0.12); color: #2E7D32; white-space: nowrap; }
+
+/* Challenge Banner */
+.challenge-banner {
+  display: grid; grid-template-columns: 200px 1fr; border-radius: var(--radius-lg, 16px);
+  overflow: hidden; box-shadow: 0 4px 24px rgba(44,62,74,0.1); background: #FAFBFC;
+}
+.challenge-banner__photo { background-size: cover; background-position: center; background-color: #D6E0E3; min-height: 180px; }
+.challenge-banner__body { padding: 24px 28px; display: flex; flex-direction: column; justify-content: center; }
+.challenge-badge {
+  display: inline-block; width: fit-content; padding: 4px 12px; border-radius: 12px;
+  background: rgba(255,152,0,0.12); color: #E65100; font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;
+}
+.challenge-banner h3 { font-family: var(--font-display, 'Cormorant Garamond', serif); font-size: 22px; color: #1B4D4F; margin: 0; }
+.challenge-latin { font-style: italic; font-size: 14px; color: #8FA5AB; margin-bottom: 10px; }
+.challenge-found { font-size: 13px; color: #2E7D32; margin-bottom: 10px; }
+.challenge-active { font-size: 13px; color: #E65100; font-weight: 600; margin-bottom: 10px; }
+.challenge-link { font-size: 13px; color: #2A7A6E; font-weight: 600; text-decoration: none; }
+.challenge-link:hover { text-decoration: underline; }
+
 /* Animations */
 @keyframes heroSlideIn { from { opacity: 0; transform: translateX(-30px); } to { opacity: 1; transform: translateX(0); } }
 @keyframes heroBgReveal { from { opacity: 0; transform: scale(1.05); } to { opacity: 1; transform: scale(1); } }
@@ -512,6 +598,7 @@ onMounted(async () => {
   .hero__gradient-left { width: 100%; }
   .quick-grid { grid-template-columns: repeat(3, 1fr); }
   .spotlight { grid-template-columns: 1fr; }
+  .challenge-banner { grid-template-columns: 1fr; }
   .species-grid { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 480px) {

@@ -205,6 +205,61 @@ def fact_of_day(db: Session = Depends(get_db)):
     }
 
 
+@router.get("/challenge")
+def monthly_challenge(db: Session = Depends(get_db)):
+    """Current month's species challenge. First to find it gets a special badge."""
+    from datetime import datetime
+
+    now = datetime.utcnow()
+    month = now.month
+
+    # Pick a deterministic "species of the month" based on month
+    # Use month as seed to always return same species for same month
+    all_species = db.query(Species).filter(
+        Species.photo_urls != None,
+        func.array_length(Species.photo_urls, 1) > 0,
+        Species.conservation_status != None,
+    ).all()
+
+    if not all_species:
+        return {"challenge": None}
+
+    target = all_species[month % len(all_species)]
+
+    # Check if anyone found it this month
+    found = db.query(Observation).filter(
+        Observation.species_id == target.id,
+        Observation.status == ObservationStatus.confirmed,
+        func.extract("month", Observation.observed_at) == month,
+        func.extract("year", Observation.observed_at) == now.year,
+    ).first()
+
+    finder = None
+    if found:
+        user = db.query(User).filter(User.id == found.author_id).first()
+        finder = {
+            "display_name": user.display_name if user else "Unknown",
+            "found_at": found.observed_at.isoformat(),
+        }
+
+    month_names = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+                   'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+
+    return {
+        "month": month_names[month - 1],
+        "year": now.year,
+        "species": {
+            "id": target.id,
+            "name_ru": target.name_ru,
+            "name_latin": target.name_latin,
+            "photo_url": target.photo_urls[0] if target.photo_urls else None,
+            "conservation_status": target.conservation_status,
+        },
+        "found": found is not None,
+        "finder": finder,
+    }
+
+
 @router.get("/quiz")
 def quiz_question(db: Session = Depends(get_db)):
     """Generate a quiz question: show a photo, guess the species name."""
