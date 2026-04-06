@@ -54,38 +54,24 @@
       </div>
     </div>
 
-    <!-- Species of the Month -->
-    <div class="section" v-if="spotlight">
+    <!-- Species of the Month + Challenge -->
+    <div class="section" v-if="challenge">
       <div class="section-header">
         <h2 class="section-title">Вид месяца</h2>
       </div>
-      <div class="spotlight" :style="{ backgroundImage: spotlight.photo_urls?.length ? `linear-gradient(to right, rgba(27,77,79,0.92) 0%, rgba(27,77,79,0.75) 45%, rgba(27,77,79,0.2) 100%), url(${spotlight.photo_urls[0]})` : '' }">
+      <div class="spotlight" :style="{ backgroundImage: challenge.species.photo_url ? `linear-gradient(to right, rgba(27,77,79,0.92) 0%, rgba(27,77,79,0.75) 45%, rgba(27,77,79,0.2) 100%), url(${challenge.species.photo_url})` : '' }">
         <div class="spotlight__body">
-          <span class="spotlight__label">Апрель 2026</span>
-          <h3 class="spotlight__name">{{ spotlight.name_ru }}</h3>
-          <div class="spotlight__latin">{{ spotlight.name_latin }}</div>
-          <p class="spotlight__desc" v-if="spotlight.conservation_status">{{ spotlight.conservation_status }}</p>
-          <p class="spotlight__desc" v-if="spotlight.do_dont_rules">{{ spotlight.do_dont_rules }}</p>
-          <router-link :to="`/species/${spotlight.id}`" class="btn btn-spotlight">Подробнее о виде &rarr;</router-link>
-        </div>
-      </div>
-    </div>
-
-    <!-- Monthly Challenge -->
-    <div class="section" v-if="challenge">
-      <div class="challenge-banner">
-        <div class="challenge-banner__photo" :style="{ backgroundImage: challenge.species.photo_url ? `url(${challenge.species.photo_url})` : '' }"></div>
-        <div class="challenge-banner__body">
-          <span class="challenge-badge">Челлендж {{ challenge.month }}</span>
-          <h3>Найдите: {{ challenge.species.name_ru }}</h3>
-          <div class="challenge-latin">{{ challenge.species.name_latin }}</div>
-          <div v-if="challenge.found" class="challenge-found">
-            Найден! Первым нашёл: <strong>{{ challenge.finder.display_name }}</strong>
+          <span class="spotlight__label">{{ challenge.month }} {{ challenge.year }}</span>
+          <h3 class="spotlight__name">{{ challenge.species.name_ru }}</h3>
+          <div class="spotlight__latin">{{ challenge.species.name_latin }}</div>
+          <p class="spotlight__desc" v-if="challenge.species.conservation_status">{{ challenge.species.conservation_status }}</p>
+          <div v-if="challenge.found" class="spotlight__challenge spotlight__challenge--found">
+            Найден! Первым обнаружил: <strong>{{ challenge.finder.display_name }}</strong>
           </div>
-          <div v-else class="challenge-active">
-            Кто первый обнаружит этот вид — получит спецбейдж!
+          <div v-else class="spotlight__challenge spotlight__challenge--active">
+            Челлендж: кто первый найдёт этот вид — получит спецбейдж!
           </div>
-          <router-link :to="`/species/${challenge.species.id}`" class="challenge-link">Узнать о виде &rarr;</router-link>
+          <router-link :to="`/species/${challenge.species.id}`" class="btn btn-spotlight">Подробнее о виде &rarr;</router-link>
         </div>
       </div>
     </div>
@@ -157,7 +143,6 @@ import api from '../api/client'
 
 const stats = reactive({ species: 0, confirmed: 0, on_review: 0, total_obs: 0 })
 const recentSpecies = ref<any[]>([])
-const spotlight = ref<any>(null)
 const factOfDay = ref<any>(null)
 const challenge = ref<any>(null)
 const recentObs = ref<any[]>([])
@@ -194,13 +179,6 @@ onMounted(async () => {
     recentSpecies.value = data.items.slice(0, 8)
     for (const g of groups) {
       g.count = data.items.filter((s: any) => s.group === g.value).length
-    }
-    // Pick a spotlight species — one with photo, conservation status, and do_dont_rules
-    const candidates = data.items.filter((s: any) => s.photo_urls?.length && s.conservation_status)
-    if (candidates.length) {
-      spotlight.value = candidates[Math.floor(Math.random() * candidates.length)]
-    } else if (data.items.length) {
-      spotlight.value = data.items.find((s: any) => s.photo_urls?.length) || data.items[0]
     }
   } catch {}
   try {
@@ -501,6 +479,9 @@ onMounted(async () => {
   transition: all 0.2s; margin-top: 8px;
 }
 .btn-spotlight:hover { background: rgba(255,255,255,0.25); }
+.spotlight__challenge { font-size: 13px; margin-bottom: 8px; padding: 8px 14px; border-radius: 8px; }
+.spotlight__challenge--active { background: rgba(255,152,0,0.2); color: #FFE0B2; font-weight: 600; }
+.spotlight__challenge--found { background: rgba(76,175,80,0.2); color: #C8E6C9; }
 
 /* Fact Banner */
 .fact-banner {
