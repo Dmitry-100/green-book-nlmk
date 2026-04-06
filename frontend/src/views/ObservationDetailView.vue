@@ -32,6 +32,12 @@
         </div>
       </div>
 
+      <!-- Map -->
+      <div v-if="obs.lat && obs.lon" class="obs-map-section">
+        <div class="obs-map-label">Место наблюдения: {{ obs.lat.toFixed(4) }}, {{ obs.lon.toFixed(4) }}</div>
+        <div id="obs-detail-map" ref="mapEl" class="obs-map"></div>
+      </div>
+
       <!-- Likes -->
       <div class="likes-section">
         <button class="like-btn" :class="{ liked: myLiked }" @click="toggleLike">
@@ -74,13 +80,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../api/client'
 
 const route = useRoute()
 const obs = ref<any>(null)
 const speciesName = ref('')
+const mapEl = ref<HTMLElement>()
 const comments = ref<any[]>([])
 const newComment = ref('')
 const likeCount = ref(0)
@@ -152,6 +159,27 @@ onMounted(async () => {
   } catch {}
   fetchComments()
   fetchLikes()
+
+  // Init map
+  await nextTick()
+  if (obs.value?.lat && obs.value?.lon && mapEl.value) {
+    try {
+      const configRes = await api.get('/config/ymaps')
+      if (!configRes.data.apiKey) return
+      const loadScript = () => new Promise<void>((resolve) => {
+        if ((window as any).ymaps) { (window as any).ymaps.ready(() => resolve()); return }
+        const s = document.createElement('script')
+        s.src = `https://api-maps.yandex.ru/2.1/?apikey=${configRes.data.apiKey}&lang=ru_RU`
+        s.async = true
+        s.onload = () => (window as any).ymaps.ready(() => resolve())
+        document.head.appendChild(s)
+      })
+      await loadScript()
+      const ymaps = (window as any).ymaps
+      const map = new ymaps.Map(mapEl.value, { center: [obs.value.lat, obs.value.lon], zoom: 15, controls: ['zoomControl'] })
+      map.geoObjects.add(new ymaps.Placemark([obs.value.lat, obs.value.lon], {}, { preset: 'islands#greenDotIcon' }))
+    } catch {}
+  }
 })
 </script>
 
@@ -176,6 +204,10 @@ onMounted(async () => {
 .info-item { background: #E8EEF0; padding: 12px 14px; border-radius: 8px; }
 .info-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #8FA5AB; display: block; margin-bottom: 2px; }
 .info-value { font-size: 14px; font-weight: 600; color: #2C3E4A; }
+
+.obs-map-section { margin-bottom: 20px; }
+.obs-map-label { font-size: 12px; color: #8FA5AB; margin-bottom: 8px; font-weight: 600; }
+.obs-map { width: 100%; height: 220px; border-radius: 12px; overflow: hidden; background: #D6E0E3; }
 
 .likes-section { display: flex; align-items: center; gap: 10px; padding-bottom: 20px; border-bottom: 1px solid #E8EEF0; margin-bottom: 20px; }
 .like-btn {

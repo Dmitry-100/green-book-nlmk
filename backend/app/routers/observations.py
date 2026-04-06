@@ -126,6 +126,7 @@ def my_observations(
 
 @router.get("/{obs_id}", response_model=ObservationResponse)
 def get_observation(obs_id: int, db: Session = Depends(get_db)):
+    from geoalchemy2.functions import ST_X, ST_Y
     obs = (
         db.query(Observation)
         .options(joinedload(Observation.media))
@@ -134,7 +135,16 @@ def get_observation(obs_id: int, db: Session = Depends(get_db)):
     )
     if not obs:
         raise HTTPException(status_code=404, detail="Observation not found")
-    return obs
+    # Extract lat/lon from geometry
+    coords = db.query(
+        ST_Y(Observation.location_point).label("lat"),
+        ST_X(Observation.location_point).label("lon"),
+    ).filter(Observation.id == obs_id).first()
+    result = ObservationResponse.model_validate(obs)
+    if coords and coords.lat is not None:
+        result.lat = float(coords.lat)
+        result.lon = float(coords.lon)
+    return result
 
 
 @router.patch("/{obs_id}", response_model=ObservationResponse)

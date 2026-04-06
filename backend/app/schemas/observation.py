@@ -53,6 +53,8 @@ class ObservationResponse(BaseModel):
     sensitive_level: SensitiveLevel
     safety_checked: bool
     created_at: datetime
+    lat: float | None = None
+    lon: float | None = None
     media: list[MediaInfo] = []
     model_config = {"from_attributes": True}
 
