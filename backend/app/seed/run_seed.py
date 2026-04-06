@@ -22,6 +22,7 @@ def seed_species():
                 season_info=item.get("season_info"),
                 description=item.get("description"),
                 do_dont_rules=item.get("do_dont_rules"),
+                photo_urls=item.get("photo_urls", []),
             )
             db.add(species)
         db.commit()
