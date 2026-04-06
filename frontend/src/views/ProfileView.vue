@@ -1,6 +1,10 @@
 <template>
   <div class="profile-page">
-    <div class="profile-header">
+    <div v-if="authError" class="auth-error">
+      <p>Для просмотра профиля необходимо войти в систему.</p>
+      <router-link to="/login" class="auth-error__link">Войти</router-link>
+    </div>
+    <div class="profile-header" v-else>
       <div class="profile-avatar">{{ profile?.display_name?.charAt(0) || 'У' }}</div>
       <div class="profile-info">
         <h1>{{ profile?.display_name || 'Загрузка...' }}</h1>
@@ -40,6 +44,15 @@
     <div class="section">
       <div class="section-header">
         <h2 class="section-title">Лидерборд</h2>
+        <div class="period-tabs">
+          <button v-for="p in [{key:'month',label:'Месяц'},{key:'quarter',label:'Квартал'},{key:'year',label:'Год'},{key:'all',label:'Все время'}]"
+                  :key="p.key"
+                  class="period-tab"
+                  :class="{ active: leaderboardPeriod === p.key }"
+                  @click="fetchLeaderboard(p.key)">
+            {{ p.label }}
+          </button>
+        </div>
       </div>
       <div class="leaderboard">
         <div v-for="(l, i) in leaders" :key="l.user_id" class="leader-item">
@@ -73,15 +86,31 @@ import api from '../api/client'
 const profile = ref<any>(null)
 const leaders = ref<any[]>([])
 const fact = ref<any>(null)
+const leaderboardPeriod = ref('all')
+const authError = ref(false)
+
+async function fetchLeaderboard(period: string) {
+  leaderboardPeriod.value = period
+  try {
+    const { data } = await api.get(`/gamification/leaderboard?period=${period}`)
+    leaders.value = data.leaders || []
+  } catch {}
+}
 
 onMounted(async () => {
+  // Profile (requires auth)
   try {
-    const [p, l, f] = await Promise.all([
-      api.get('/gamification/profile'),
+    const { data } = await api.get('/gamification/profile')
+    profile.value = data
+  } catch (e: any) {
+    if (e.response?.status === 401) authError.value = true
+  }
+  // Leaderboard + fact (no auth needed)
+  try {
+    const [l, f] = await Promise.all([
       api.get('/gamification/leaderboard'),
       api.get('/gamification/fact-of-day'),
     ])
-    profile.value = p.data
     leaders.value = l.data.leaders || []
     fact.value = f.data.fact !== null ? f.data : null
   } catch {}
@@ -104,6 +133,12 @@ onMounted(async () => {
 
 .section { margin-bottom: 32px; }
 .section-title { font-family: var(--font-display); font-size: 24px; color: var(--teal-dark); margin-bottom: 16px; }
+.section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.section-header .section-title { margin-bottom: 0; }
+.period-tabs { display: flex; gap: 4px; background: var(--slate-wash, #E8EEF0); border-radius: 8px; padding: 3px; }
+.period-tab { padding: 6px 14px; border: none; background: transparent; border-radius: 6px; font-size: 12px; font-weight: 600; color: var(--slate-mid, #8FA5AB); cursor: pointer; transition: all 0.2s; }
+.period-tab:hover { color: var(--teal, #2A7A6E); }
+.period-tab.active { background: white; color: var(--teal, #2A7A6E); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
 
 .achievements-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
 .achievement-card {
@@ -146,4 +181,8 @@ onMounted(async () => {
 .fact-link { color: white; font-weight: 600; text-decoration: none; border-bottom: 1px solid rgba(255,255,255,0.4); }
 
 .empty-hint { color: var(--slate-light); font-size: 14px; }
+.auth-error { text-align: center; padding: 60px 20px; }
+.auth-error p { font-size: 16px; color: var(--slate-mid, #8FA5AB); margin-bottom: 16px; }
+.auth-error__link { display: inline-block; padding: 10px 28px; background: var(--teal, #2A7A6E); color: white; border-radius: 8px; text-decoration: none; font-weight: 600; }
+.auth-error__link:hover { opacity: 0.9; }
 </style>

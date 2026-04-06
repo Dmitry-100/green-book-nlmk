@@ -69,6 +69,11 @@ def confirm_observation(
         message=f"Ваше наблюдение #{obs.id} подтверждено экологом.",
     ))
     db.commit()
+
+    # Award gamification (points, achievements, first discovery)
+    from app.services.gamification import award_gamification
+    award_gamification(obs.id, db)
+
     db.refresh(obs)
     return obs
 

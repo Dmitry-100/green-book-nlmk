@@ -17,14 +17,30 @@ router = APIRouter(prefix="/api/gamification", tags=["gamification"])
 
 @router.get("/leaderboard")
 def leaderboard(
-    period: str = Query("all", regex="^(all|month|week)$"),
+    period: str = Query("all", pattern="^(all|month|quarter|year)$"),
     db: Session = Depends(get_db),
 ):
-    """Top observers by points."""
+    """Top observers by points, optionally filtered by period."""
+    from datetime import datetime, timedelta
+
     query = db.query(
         UserPoints.user_id,
         func.sum(UserPoints.points).label("total_points"),
-    ).group_by(UserPoints.user_id).order_by(func.sum(UserPoints.points).desc()).limit(20)
+    )
+
+    if period == "month":
+        cutoff = datetime.utcnow() - timedelta(days=30)
+        query = query.filter(UserPoints.created_at >= cutoff)
+    elif period == "quarter":
+        cutoff = datetime.utcnow() - timedelta(days=90)
+        query = query.filter(UserPoints.created_at >= cutoff)
+    elif period == "year":
+        cutoff = datetime.utcnow() - timedelta(days=365)
+        query = query.filter(UserPoints.created_at >= cutoff)
+
+    query = query.group_by(UserPoints.user_id).order_by(
+        func.sum(UserPoints.points).desc()
+    ).limit(20)
 
     results = query.all()
     leaders = []
@@ -36,7 +52,7 @@ def leaderboard(
                 "display_name": user.display_name,
                 "total_points": total,
             })
-    return {"leaders": leaders}
+    return {"leaders": leaders, "period": period}
 
 
 @router.get("/profile")

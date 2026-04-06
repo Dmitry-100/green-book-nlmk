@@ -18,7 +18,7 @@
           </svg>
           <span v-if="unreadCount > 0" class="badge">{{ unreadCount }}</span>
         </div>
-        <div class="user-avatar" @click="$router.push('/login')" style="cursor:pointer" title="Сменить роль">ДС</div>
+        <div class="user-avatar" @click="$router.push('/profile')" style="cursor:pointer" title="Мой профиль">ДС</div>
       </div>
     </nav>
 

@@ -24,6 +24,10 @@
         <div v-if="species.do_dont_rules" class="detail-rules">
           <div class="rule-card"><span class="rule-card__icon">&#9888;</span><span>{{ species.do_dont_rules }}</span></div>
         </div>
+        <div v-if="discoverer" class="discoverer-block">
+          <span class="discoverer-icon">🏅</span>
+          <span>Первое наблюдение: <strong>{{ discoverer.display_name }}</strong>, {{ formatDate(discoverer.discovered_at) }}</span>
+        </div>
         <div class="detail-actions"><router-link to="/species" class="btn btn-outline">&larr; К списку видов</router-link></div>
       </div>
     </div>
@@ -38,6 +42,7 @@ import api from '../api/client'
 
 const route = useRoute()
 const species = ref<any>(null)
+const discoverer = ref<any>(null)
 
 const GROUP_ICONS: Record<string, string> = { plants: '🌿', fungi: '🍄', insects: '🐛', herpetofauna: '🐍', birds: '🐦', mammals: '🦔' }
 const GROUP_LABELS: Record<string, string> = { plants: 'Растения', fungi: 'Грибы', insects: 'Насекомые', herpetofauna: 'Герпетофауна', birds: 'Птицы', mammals: 'Млекопитающие' }
@@ -48,7 +53,22 @@ const groupLabel = computed(() => GROUP_LABELS[species.value?.group] || '')
 const categoryLabel = computed(() => CATEGORY_LABELS[species.value?.category] || '')
 const imgStyle = computed(() => species.value?.photo_urls?.length ? { backgroundImage: `url(${species.value.photo_urls[0]})` } : {})
 
-onMounted(async () => { const { data } = await api.get(`/species/${route.params.id}`); species.value = data })
+function formatDate(iso: string): string {
+  const d = new Date(iso)
+  const months = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`
+}
+
+onMounted(async () => {
+  const { data } = await api.get(`/species/${route.params.id}`)
+  species.value = data
+  try {
+    const res = await api.get(`/gamification/species/${route.params.id}/discoverer`)
+    if (res.data.discoverer) {
+      discoverer.value = res.data.discoverer
+    }
+  } catch {}
+})
 </script>
 
 <style scoped>
@@ -77,5 +97,7 @@ onMounted(async () => { const { data } = await api.get(`/species/${route.params.
 .btn-outline { background: transparent; color: #2A7A6E; border: 1.5px solid #2A7A6E; }
 .btn-outline:hover { background: #2A7A6E; color: white; }
 .detail-loading { text-align: center; padding: 60px; color: #8FA5AB; }
+.discoverer-block { display: flex; align-items: center; gap: 10px; margin-top: 20px; padding: 14px 16px; background: rgba(42,122,110,0.06); border-radius: 8px; border-left: 3px solid #2A7A6E; font-size: 14px; color: #1B4D4F; }
+.discoverer-icon { font-size: 22px; flex-shrink: 0; }
 @media (max-width: 768px) { .detail-header { grid-template-columns: 1fr; } }
 </style>
