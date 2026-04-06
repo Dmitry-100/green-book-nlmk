@@ -32,8 +32,8 @@
       <router-link to="/passport" active-class="active">Экопаспорт</router-link>
       <router-link to="/routes" active-class="active">Маршруты</router-link>
       <router-link to="/help" active-class="active">Правила</router-link>
-      <router-link to="/expert" active-class="active">Эколог</router-link>
-      <router-link to="/admin" active-class="active">Админ</router-link>
+      <router-link v-if="auth.isEcologist()" to="/expert" active-class="active">Эколог</router-link>
+      <router-link v-if="auth.isAdmin()" to="/admin" active-class="active">Админ</router-link>
     </div>
 
     <main>
@@ -44,7 +44,9 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useAuthStore } from '../stores/auth'
 
+const auth = useAuthStore()
 const unreadCount = ref(3)
 </script>
 
