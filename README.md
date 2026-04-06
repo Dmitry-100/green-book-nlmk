@@ -325,6 +325,7 @@ docker compose exec backend alembic upgrade head
 docker compose exec backend python -m app.seed.run_seed
 docker compose exec backend python -m app.seed.seed_tree
 docker compose exec backend python -m app.seed.seed_achievements
+docker compose exec backend python -m app.seed.seed_demo
 ```
 
 ### Доступ
