@@ -12,7 +12,8 @@
     </div>
     <div class="obs-list">
       <div v-for="obs in observations" :key="obs.id" class="obs-item" @click="$router.push(`/observations/${obs.id}`)">
-        <div class="obs-item__icon">{{ groupIcon(obs.group) }}</div>
+        <div class="obs-item__thumb" v-if="obs.media?.length" :style="{ backgroundImage: `url(/api/media/${obs.media[0].s3_key})` }"></div>
+        <div class="obs-item__icon" v-else>{{ groupIcon(obs.group) }}</div>
         <div class="obs-item__info">
           <h4>{{ obs.group_label }} {{ obs.comment ? '— ' + obs.comment.slice(0, 50) : '' }}</h4>
           <p>{{ new Date(obs.observed_at).toLocaleDateString('ru') }} {{ new Date(obs.observed_at).toLocaleTimeString('ru', {hour:'2-digit', minute:'2-digit'}) }}</p>
@@ -65,6 +66,7 @@ onMounted(fetchObs)
 .obs-item { background: #FAFBFC; border-radius: 12px; padding: 16px 20px; display: grid; grid-template-columns: 48px 1fr auto; gap: 16px; align-items: center; box-shadow: 0 2px 12px rgba(44,62,74,0.08); cursor: pointer; transition: all 0.2s; }
 .obs-item:hover { box-shadow: 0 8px 32px rgba(44,62,74,0.14); transform: translateX(4px); }
 .obs-item__icon { font-size: 28px; text-align: center; }
+.obs-item__thumb { width: 48px; height: 48px; border-radius: 10px; background-size: cover; background-position: center; background-color: #D6E0E3; flex-shrink: 0; }
 .obs-item__info h4 { font-size: 14px; font-weight: 700; color: #2C3E4A; }
 .obs-item__info p { font-size: 12px; color: #8FA5AB; margin-top: 2px; }
 .obs-status { padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; white-space: nowrap; }

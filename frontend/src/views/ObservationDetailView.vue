@@ -12,12 +12,15 @@
         </div>
       </div>
 
+      <!-- Photo -->
+      <div v-if="photoUrl" class="obs-photo" :style="{ backgroundImage: `url(${photoUrl})` }"></div>
+
       <p v-if="obs.comment" class="obs-comment">{{ obs.comment }}</p>
 
       <div class="obs-detail-info">
-        <div class="info-item" v-if="obs.species_id">
+        <div class="info-item" v-if="speciesName">
           <span class="info-label">Вид</span>
-          <span class="info-value">ID: {{ obs.species_id }}</span>
+          <span class="info-value">{{ speciesName }}</span>
         </div>
         <div class="info-item">
           <span class="info-label">Группа</span>
@@ -77,10 +80,12 @@ import api from '../api/client'
 
 const route = useRoute()
 const obs = ref<any>(null)
+const speciesName = ref('')
 const comments = ref<any[]>([])
 const newComment = ref('')
 const likeCount = ref(0)
 const myLiked = ref(false)
+const photoUrl = ref('')
 
 const groupIcons: Record<string, string> = { plants: '🌿', fungi: '🍄', insects: '🐛', herpetofauna: '🐍', birds: '🐦', mammals: '🦔' }
 const groupLabels: Record<string, string> = { plants: 'Растение', fungi: 'Гриб', insects: 'Насекомое', herpetofauna: 'Герпетофауна', birds: 'Птица', mammals: 'Млекопитающее' }
@@ -133,6 +138,17 @@ onMounted(async () => {
   try {
     const { data } = await api.get(`/observations/${route.params.id}`)
     obs.value = data
+    // Load species name
+    if (data.species_id) {
+      try {
+        const sp = await api.get(`/species/${data.species_id}`)
+        speciesName.value = sp.data.name_ru
+      } catch {}
+    }
+    // Photo from media
+    if (data.media?.length) {
+      photoUrl.value = `/api/media/${data.media[0].s3_key}`
+    }
   } catch {}
   fetchComments()
   fetchLikes()
@@ -142,6 +158,7 @@ onMounted(async () => {
 <style scoped>
 .obs-detail-page { max-width: 700px; margin: 0 auto; padding: 32px; }
 .obs-detail-card { background: #FAFBFC; border-radius: 20px; padding: 32px; box-shadow: 0 2px 12px rgba(44,62,74,0.08); }
+.obs-photo { width: 100%; height: 280px; background-size: cover; background-position: center; border-radius: 12px; margin-bottom: 20px; background-color: #D6E0E3; }
 
 .obs-detail-header { display: flex; gap: 16px; align-items: center; margin-bottom: 20px; }
 .obs-group-icon { font-size: 40px; }
