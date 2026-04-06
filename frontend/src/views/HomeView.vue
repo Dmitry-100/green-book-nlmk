@@ -124,7 +124,8 @@
       </div>
       <div class="news-feed">
         <router-link v-for="o in recentObs" :key="o.id" :to="`/observations/${o.id}`" class="news-item">
-          <div class="news-item__icon">{{ groupIcon(o.group) }}</div>
+          <div class="news-item__thumb" v-if="o.media?.length" :style="{ backgroundImage: `url(/api/media/${o.media[0].s3_key})` }"></div>
+          <div class="news-item__icon" v-else>{{ groupIcon(o.group) }}</div>
           <div class="news-item__body">
             <div class="news-item__title">{{ groupLabel(o.group) }}</div>
             <div class="news-item__comment" v-if="o.comment">{{ o.comment.slice(0, 80) }}{{ o.comment.length > 80 ? '...' : '' }}</div>
@@ -540,6 +541,7 @@ onMounted(async () => {
 }
 .news-item:hover { box-shadow: 0 4px 16px rgba(44,62,74,0.12); transform: translateX(4px); }
 .news-item__icon { font-size: 28px; text-align: center; }
+.news-item__thumb { width: 48px; height: 48px; border-radius: 10px; background-size: cover; background-position: center; background-color: #D6E0E3; flex-shrink: 0; }
 .news-item__title { font-size: 14px; font-weight: 700; color: #2C3E4A; }
 .news-item__comment { font-size: 13px; color: #4A6572; margin-top: 2px; }
 .news-item__date { font-size: 11px; color: #8FA5AB; margin-top: 4px; }
