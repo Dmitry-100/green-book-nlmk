@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -90,6 +91,36 @@ const router = createRouter({
       ],
     },
   ],
+})
+
+const authRequiredNames = new Set([
+  'observe',
+  'my-observations',
+  'profile',
+  'expert-queue',
+  'admin',
+])
+
+router.beforeEach((to) => {
+  const auth = useAuthStore()
+
+  if (to.name === 'login') {
+    return true
+  }
+
+  if (to.name && authRequiredNames.has(to.name.toString()) && !auth.token) {
+    return { name: 'login', query: { redirect: to.fullPath } }
+  }
+
+  if (to.name === 'expert-queue' && !auth.isEcologist()) {
+    return { name: 'home' }
+  }
+
+  if (to.name === 'admin' && !auth.isAdmin()) {
+    return { name: 'home' }
+  }
+
+  return true
 })
 
 export default router

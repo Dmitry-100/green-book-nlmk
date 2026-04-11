@@ -12,7 +12,11 @@
     </div>
     <div class="obs-list">
       <div v-for="obs in observations" :key="obs.id" class="obs-item" @click="$router.push(`/observations/${obs.id}`)">
-        <div class="obs-item__thumb" v-if="obs.media?.length" :style="{ backgroundImage: `url(/api/media/${obs.media[0].s3_key})` }"></div>
+        <div
+          class="obs-item__thumb"
+          v-if="obs.media?.length"
+          :style="{ backgroundImage: `url(/api/media/${observationPreviewMediaKey(obs)})` }"
+        ></div>
         <div class="obs-item__icon" v-else>{{ groupIcon(obs.group) }}</div>
         <div class="obs-item__info">
           <h4>{{ obs.group_label }} {{ obs.comment ? '— ' + obs.comment.slice(0, 50) : '' }}</h4>
@@ -41,10 +45,15 @@ const STATUS_LABELS: Record<string, string> = { on_review: 'На проверк�
 
 function groupIcon(g: string) { return GROUP_ICONS[g] || '🌱' }
 function statusLabel(s: string) { return STATUS_LABELS[s] || s }
+function observationPreviewMediaKey(observation: any) {
+  const media = observation?.media?.[0]
+  if (!media) return ''
+  return media.thumbnail_key || media.s3_key
+}
 
 async function fetchObs() {
   loading.value = true
-  const params: any = {}
+  const params: any = { include_total: false }
   if (statusFilter.value) params.status = statusFilter.value
   try {
     const { data } = await api.get('/observations/my', { params })

@@ -86,7 +86,7 @@
     <!-- Heatmap -->
     <div class="section-card" v-if="stats.heatmap?.length">
       <h2>Карта наблюдений</h2>
-      <p class="section-hint">{{ stats.heatmap.length }} подтверждённых наблюдений на территории площадки</p>
+      <p class="section-hint">{{ heatmapHint }}</p>
       <div id="passport-map" ref="mapEl" class="passport-map"></div>
     </div>
   </div>
@@ -94,12 +94,14 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick } from 'vue'
-import api from '../api/client'
+import { getCached } from '../api/client'
+import { loadYmaps } from '../services/ymapsLoader'
 
 const stats = ref<any>({
   shannon_index: 0, total_species_in_catalog: 0, confirmed_species: 0,
   total_confirmed_observations: 0, biodiversity_coverage: 0,
   species_by_group: {}, seasonal_dynamics: [], heatmap: [],
+  heatmap_total: 0, heatmap_limit: 0, heatmap_limited: false,
 })
 const mapEl = ref<HTMLElement>()
 const showTooltip = ref(false)
@@ -146,56 +148,70 @@ const monthsData = computed(() => {
 
 const maxGroupCount = computed(() => Math.max(...groupsOrdered.value.map(g => g.count), 1))
 const maxSeasonCount = computed(() => Math.max(...monthsData.value.map(m => m.species_count), 1))
+const heatmapHint = computed(() => {
+  const shown = stats.value.heatmap?.length || 0
+  const total = Number(stats.value.heatmap_total || shown)
+  if (!shown) return 'Нет данных о наблюдениях'
+  if (stats.value.heatmap_limited && total > shown) {
+    return `Показаны ${shown} из ${total} подтверждённых наблюдений на территории площадки`
+  }
+  return `${shown} подтверждённых наблюдений на территории площадки`
+})
 
 function barWidth(count: number) { return `${(count / maxGroupCount.value) * 100}%` }
 function seasonBarHeight(count: number) { return `${(count / maxSeasonCount.value) * 100}%` }
 
-onMounted(async () => {
-  try {
-    const { data } = await api.get('/gamification/stats')
-    stats.value = data
-  } catch {}
+function buildGallerySpecies(items: any[]): any[] {
+  const withPhotos = items.filter((s: any) => s.photo_urls?.length)
+  const byGroup: Record<string, any[]> = {}
+  for (const species of withPhotos) {
+    if (!byGroup[species.group]) byGroup[species.group] = []
+    byGroup[species.group].push(species)
+  }
+  const picked: any[] = []
+  for (const group of Object.keys(byGroup)) {
+    const groupItems = byGroup[group]
+    picked.push(groupItems[Math.floor(Math.random() * groupItems.length)])
+  }
+  return picked.slice(0, 6)
+}
 
-  // Load gallery species (random with photos)
-  try {
-    const { data } = await api.get('/species', { params: { limit: 200 } })
-    const withPhotos = data.items.filter((s: any) => s.photo_urls?.length)
-    // Pick 6 random from different groups
-    const byGroup: Record<string, any[]> = {}
-    for (const s of withPhotos) {
-      if (!byGroup[s.group]) byGroup[s.group] = []
-      byGroup[s.group].push(s)
-    }
-    const picked: any[] = []
-    for (const group of Object.keys(byGroup)) {
-      const arr = byGroup[group]
-      picked.push(arr[Math.floor(Math.random() * arr.length)])
-    }
-    gallerySpecies.value = picked.slice(0, 6)
-  } catch {}
+onMounted(async () => {
+  const [statsResult, speciesResult] = await Promise.allSettled([
+    getCached(
+      '/gamification/stats',
+      { params: { heatmap_limit: 1200 } },
+      30 * 1000,
+      'passport:stats:1200'
+    ),
+    getCached(
+      '/species',
+      { params: { limit: 80, include_total: false } },
+      5 * 60 * 1000,
+      'passport:species:gallery:v1'
+    ),
+  ])
+
+  if (statsResult.status === 'fulfilled') {
+    stats.value = statsResult.value.data
+  }
+  if (speciesResult.status === 'fulfilled') {
+    gallerySpecies.value = buildGallerySpecies(speciesResult.value.data.items || [])
+  }
 
   // Init map
   await nextTick()
   if (stats.value.heatmap?.length && mapEl.value) {
     try {
-      const configRes = await api.get('/config/ymaps')
+      const configRes = await getCached(
+        '/config/ymaps',
+        {},
+        60 * 60 * 1000,
+        'config:ymaps'
+      )
       if (!configRes.data.apiKey) return
 
-      const loadScript = () => new Promise<void>((resolve, reject) => {
-        if ((window as any).ymaps) {
-          (window as any).ymaps.ready(() => resolve())
-          return
-        }
-        const s = document.createElement('script')
-        s.src = `https://api-maps.yandex.ru/2.1/?apikey=${configRes.data.apiKey}&lang=ru_RU`
-        s.async = true
-        s.onload = () => (window as any).ymaps.ready(() => resolve())
-        s.onerror = () => reject()
-        document.head.appendChild(s)
-      })
-
-      await loadScript()
-      const ymaps = (window as any).ymaps
+      const ymaps = await loadYmaps(configRes.data.apiKey)
 
       const map = new ymaps.Map(mapEl.value, {
         center: [52.59, 39.60],
@@ -212,12 +228,18 @@ onMounted(async () => {
         mammals: 'islands#redDotIcon',
       }
 
-      for (const point of stats.value.heatmap) {
-        const placemark = new ymaps.Placemark([point.lat, point.lon], {}, {
+      const clusterer = new ymaps.Clusterer({
+        preset: 'islands#greenClusterIcons',
+        clusterDisableClickZoom: false,
+        clusterBalloonContentLayout: 'cluster#balloonCarousel',
+      })
+      const placemarks = stats.value.heatmap.map((point: any) => {
+        return new ymaps.Placemark([point.lat, point.lon], {}, {
           preset: groupColors[point.group] || 'islands#grayDotIcon',
         })
-        map.geoObjects.add(placemark)
-      }
+      })
+      clusterer.add(placemarks)
+      map.geoObjects.add(clusterer)
     } catch {}
   }
 })

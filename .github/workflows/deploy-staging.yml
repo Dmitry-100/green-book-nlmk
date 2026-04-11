@@ -1,0 +1,245 @@
+name: Deploy Staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Optional custom image tag (default: commit SHA)"
+        required: false
+        type: string
+      base_url:
+        description: "Optional staging API base URL override"
+        required: false
+        type: string
+      run_migrations:
+        description: "Run alembic migrations before switching to new images"
+        required: true
+        type: boolean
+        default: true
+      fail_on_ops_alerts:
+        description: "Fail smoke when /api/admin/ops/alerts returns status=alert"
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-publish:
+    runs-on: ubuntu-latest
+    outputs:
+      backend_image: ${{ steps.refs.outputs.backend_image }}
+      frontend_image: ${{ steps.refs.outputs.frontend_image }}
+      image_tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve registry metadata
+        id: meta
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          OWNER_LOWER="$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')"
+          echo "registry=ghcr.io" >> "$GITHUB_OUTPUT"
+          echo "image_namespace=${OWNER_LOWER}/green-book-nlmk" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve image tag
+        id: tag
+        env:
+          INPUT_TAG: ${{ github.event.inputs.image_tag }}
+        run: |
+          TAG="$INPUT_TAG"
+          if [ -z "$TAG" ]; then
+            TAG="${GITHUB_SHA}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.registry }}/${{ steps.meta.outputs.image_namespace }}/backend:${{ steps.tag.outputs.tag }}
+            ${{ steps.meta.outputs.registry }}/${{ steps.meta.outputs.image_namespace }}/backend:staging-latest
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.registry }}/${{ steps.meta.outputs.image_namespace }}/frontend:${{ steps.tag.outputs.tag }}
+            ${{ steps.meta.outputs.registry }}/${{ steps.meta.outputs.image_namespace }}/frontend:staging-latest
+
+      - name: Expose image refs
+        id: refs
+        run: |
+          echo "backend_image=${{ steps.meta.outputs.registry }}/${{ steps.meta.outputs.image_namespace }}/backend:${{ steps.tag.outputs.tag }}" >> "$GITHUB_OUTPUT"
+          echo "frontend_image=${{ steps.meta.outputs.registry }}/${{ steps.meta.outputs.image_namespace }}/frontend:${{ steps.tag.outputs.tag }}" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-publish
+    outputs:
+      prev_backend_image: ${{ steps.prev.outputs.prev_backend_image }}
+      prev_frontend_image: ${{ steps.prev.outputs.prev_frontend_image }}
+      base_url: ${{ steps.base_url.outputs.base_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        env:
+          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          STAGING_SSH_PORT: ${{ secrets.STAGING_SSH_PORT }}
+        run: |
+          if [ -z "$STAGING_SSH_PRIVATE_KEY" ] || [ -z "$STAGING_SSH_HOST" ]; then
+            echo "STAGING_SSH_PRIVATE_KEY and STAGING_SSH_HOST must be configured"
+            exit 1
+          fi
+          SSH_PORT="${STAGING_SSH_PORT:-22}"
+          mkdir -p ~/.ssh
+          printf "%s" "$STAGING_SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -p "$SSH_PORT" -H "$STAGING_SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Resolve base URL
+        id: base_url
+        env:
+          INPUT_BASE_URL: ${{ github.event.inputs.base_url }}
+          SECRET_BASE_URL: ${{ secrets.STAGING_BASE_URL }}
+        run: |
+          BASE_URL="$INPUT_BASE_URL"
+          if [ -z "$BASE_URL" ]; then
+            BASE_URL="$SECRET_BASE_URL"
+          fi
+          if [ -z "$BASE_URL" ]; then
+            echo "Staging base URL is required (input or STAGING_BASE_URL secret)."
+            exit 1
+          fi
+          echo "base_url=$BASE_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Capture previous image refs
+        id: prev
+        env:
+          STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          STAGING_SSH_PORT: ${{ secrets.STAGING_SSH_PORT }}
+          STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+          STAGING_APP_DIR: ${{ secrets.STAGING_APP_DIR }}
+          BACKEND_IMAGE: ${{ needs.build-publish.outputs.backend_image }}
+          FRONTEND_IMAGE: ${{ needs.build-publish.outputs.frontend_image }}
+        run: |
+          if [ -z "$STAGING_SSH_USER" ] || [ -z "$STAGING_APP_DIR" ]; then
+            echo "STAGING_SSH_USER and STAGING_APP_DIR must be configured"
+            exit 1
+          fi
+          SSH_PORT="${STAGING_SSH_PORT:-22}"
+          PREV_BACKEND=$(ssh -p "$SSH_PORT" "$STAGING_SSH_USER@$STAGING_SSH_HOST" "cd '$STAGING_APP_DIR' && BACKEND_IMAGE='$BACKEND_IMAGE' FRONTEND_IMAGE='$FRONTEND_IMAGE' docker compose -f docker-compose.staging.yml ps -q backend | xargs -r docker inspect --format '{{.Config.Image}}' | head -n1")
+          PREV_FRONTEND=$(ssh -p "$SSH_PORT" "$STAGING_SSH_USER@$STAGING_SSH_HOST" "cd '$STAGING_APP_DIR' && BACKEND_IMAGE='$BACKEND_IMAGE' FRONTEND_IMAGE='$FRONTEND_IMAGE' docker compose -f docker-compose.staging.yml ps -q frontend | xargs -r docker inspect --format '{{.Config.Image}}' | head -n1")
+          echo "prev_backend_image=$PREV_BACKEND" >> "$GITHUB_OUTPUT"
+          echo "prev_frontend_image=$PREV_FRONTEND" >> "$GITHUB_OUTPUT"
+
+      - name: Pull new images
+        env:
+          STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          STAGING_SSH_PORT: ${{ secrets.STAGING_SSH_PORT }}
+          STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+          STAGING_APP_DIR: ${{ secrets.STAGING_APP_DIR }}
+          BACKEND_IMAGE: ${{ needs.build-publish.outputs.backend_image }}
+          FRONTEND_IMAGE: ${{ needs.build-publish.outputs.frontend_image }}
+        run: |
+          SSH_PORT="${STAGING_SSH_PORT:-22}"
+          ssh -p "$SSH_PORT" "$STAGING_SSH_USER@$STAGING_SSH_HOST" "cd '$STAGING_APP_DIR' && BACKEND_IMAGE='$BACKEND_IMAGE' FRONTEND_IMAGE='$FRONTEND_IMAGE' docker compose -f docker-compose.staging.yml pull backend frontend"
+
+      - name: Run migrations on staging
+        if: github.event.inputs.run_migrations == 'true'
+        env:
+          STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          STAGING_SSH_PORT: ${{ secrets.STAGING_SSH_PORT }}
+          STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+          STAGING_APP_DIR: ${{ secrets.STAGING_APP_DIR }}
+          BACKEND_IMAGE: ${{ needs.build-publish.outputs.backend_image }}
+          FRONTEND_IMAGE: ${{ needs.build-publish.outputs.frontend_image }}
+        run: |
+          SSH_PORT="${STAGING_SSH_PORT:-22}"
+          ssh -p "$SSH_PORT" "$STAGING_SSH_USER@$STAGING_SSH_HOST" "cd '$STAGING_APP_DIR' && BACKEND_IMAGE='$BACKEND_IMAGE' FRONTEND_IMAGE='$FRONTEND_IMAGE' docker compose -f docker-compose.staging.yml run --rm backend alembic upgrade head"
+
+      - name: Switch staging services to new images
+        env:
+          STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          STAGING_SSH_PORT: ${{ secrets.STAGING_SSH_PORT }}
+          STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+          STAGING_APP_DIR: ${{ secrets.STAGING_APP_DIR }}
+          BACKEND_IMAGE: ${{ needs.build-publish.outputs.backend_image }}
+          FRONTEND_IMAGE: ${{ needs.build-publish.outputs.frontend_image }}
+        run: |
+          SSH_PORT="${STAGING_SSH_PORT:-22}"
+          ssh -p "$SSH_PORT" "$STAGING_SSH_USER@$STAGING_SSH_HOST" "cd '$STAGING_APP_DIR' && BACKEND_IMAGE='$BACKEND_IMAGE' FRONTEND_IMAGE='$FRONTEND_IMAGE' docker compose -f docker-compose.staging.yml up -d backend frontend"
+
+  smoke:
+    runs-on: ubuntu-latest
+    needs: [build-publish, deploy]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run post-deploy smoke
+        env:
+          BASE_URL: ${{ needs.deploy.outputs.base_url }}
+          SMOKE_ADMIN_TOKEN: ${{ secrets.SMOKE_ADMIN_TOKEN }}
+          FAIL_ON_ALERTS: ${{ github.event.inputs.fail_on_ops_alerts }}
+        run: |
+          CMD=(python scripts/release_smoke.py --base-url "$BASE_URL" --admin-token "$SMOKE_ADMIN_TOKEN")
+          if [ "$FAIL_ON_ALERTS" = "true" ]; then
+            CMD+=(--fail-on-ops-alerts)
+          fi
+          "${CMD[@]}"
+
+  rollback:
+    runs-on: ubuntu-latest
+    needs: [deploy, smoke]
+    if: ${{ failure() && needs.deploy.outputs.prev_backend_image != '' && needs.deploy.outputs.prev_frontend_image != '' }}
+    steps:
+      - name: Configure SSH
+        env:
+          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          STAGING_SSH_PORT: ${{ secrets.STAGING_SSH_PORT }}
+        run: |
+          SSH_PORT="${STAGING_SSH_PORT:-22}"
+          mkdir -p ~/.ssh
+          printf "%s" "$STAGING_SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -p "$SSH_PORT" -H "$STAGING_SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Roll back previous images
+        env:
+          STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          STAGING_SSH_PORT: ${{ secrets.STAGING_SSH_PORT }}
+          STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+          STAGING_APP_DIR: ${{ secrets.STAGING_APP_DIR }}
+          PREV_BACKEND_IMAGE: ${{ needs.deploy.outputs.prev_backend_image }}
+          PREV_FRONTEND_IMAGE: ${{ needs.deploy.outputs.prev_frontend_image }}
+        run: |
+          SSH_PORT="${STAGING_SSH_PORT:-22}"
+          ssh -p "$SSH_PORT" "$STAGING_SSH_USER@$STAGING_SSH_HOST" "cd '$STAGING_APP_DIR' && BACKEND_IMAGE='$PREV_BACKEND_IMAGE' FRONTEND_IMAGE='$PREV_FRONTEND_IMAGE' docker compose -f docker-compose.staging.yml up -d backend frontend"

@@ -1,23 +1,63 @@
 import pytest
+import redis
 from fastapi.testclient import TestClient
 from jose import jwt
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
 from app.config import settings
 from app.database import Base, get_db
 from app.main import app
-from app.models.user import UserRole
 
-# Use a separate test database (same server, different DB name)
-TEST_DATABASE_URL = settings.database_url.replace("/greenbook", "/greenbook_test")
+base_db_url = make_url(settings.database_url)
+if not base_db_url.database:
+    raise RuntimeError("DATABASE_URL must include a database name")
+
+if base_db_url.database.endswith("_test"):
+    TEST_DATABASE_NAME = base_db_url.database
+else:
+    TEST_DATABASE_NAME = f"{base_db_url.database}_test"
+
+TEST_DATABASE_URL = base_db_url.set(database=TEST_DATABASE_NAME)
+ADMIN_DATABASE_URL = base_db_url.set(database="postgres")
 
 engine = create_engine(TEST_DATABASE_URL)
 TestSession = sessionmaker(bind=engine)
 
 
+def clear_rate_limit_keys() -> None:
+    try:
+        client = redis.from_url(settings.redis_url)
+        keys = list(client.scan_iter(match="ratelimit:*", count=200))
+        if keys:
+            client.delete(*keys)
+    except Exception:
+        # Tests should still run when Redis is unavailable.
+        return
+
+
+def ensure_test_db_exists():
+    admin_engine = create_engine(ADMIN_DATABASE_URL, isolation_level="AUTOCOMMIT")
+    try:
+        with admin_engine.connect() as conn:
+            exists = conn.execute(
+                text("SELECT 1 FROM pg_database WHERE datname = :db_name"),
+                {"db_name": TEST_DATABASE_NAME},
+            ).scalar()
+            if not exists:
+                conn.execute(text(f'CREATE DATABASE "{TEST_DATABASE_NAME}"'))
+    finally:
+        admin_engine.dispose()
+
+
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_db():
+    ensure_test_db_exists()
+    with engine.connect() as conn:
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+        conn.commit()
     Base.metadata.create_all(bind=engine)
     yield
     Base.metadata.drop_all(bind=engine)
@@ -27,6 +67,10 @@ def setup_test_db():
 def db():
     session = TestSession()
     try:
+        clear_rate_limit_keys()
+        for table in reversed(Base.metadata.sorted_tables):
+            session.execute(table.delete())
+        session.commit()
         yield session
     finally:
         session.rollback()

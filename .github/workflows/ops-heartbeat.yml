@@ -1,0 +1,52 @@
+name: Ops Heartbeat
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Optional base URL override (if empty, OPS_BASE_URL secret is used)"
+        required: false
+        type: string
+  schedule:
+    - cron: "0 */6 * * *"
+
+jobs:
+  heartbeat:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Resolve base URL
+        id: resolve
+        env:
+          INPUT_BASE_URL: ${{ github.event.inputs.base_url }}
+          SECRET_BASE_URL: ${{ secrets.OPS_BASE_URL }}
+        run: |
+          BASE_URL="$INPUT_BASE_URL"
+          if [ -z "$BASE_URL" ]; then
+            BASE_URL="$SECRET_BASE_URL"
+          fi
+          if [ -z "$BASE_URL" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "No base URL configured. Set OPS_BASE_URL secret or pass workflow_dispatch input."
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "base_url=$BASE_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Run heartbeat smoke
+        if: steps.resolve.outputs.skip != 'true'
+        env:
+          BASE_URL: ${{ steps.resolve.outputs.base_url }}
+          SMOKE_ADMIN_TOKEN: ${{ secrets.SMOKE_ADMIN_TOKEN }}
+        run: |
+          python scripts/release_smoke.py \
+            --base-url "$BASE_URL" \
+            --admin-token "$SMOKE_ADMIN_TOKEN" \
+            --fail-on-ops-alerts

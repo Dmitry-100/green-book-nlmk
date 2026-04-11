@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import String, Text, Enum, Boolean, DateTime, func
+from sqlalchemy import String, Text, Enum, Boolean, DateTime, Index, func
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -44,4 +44,19 @@ class Species(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
+    )
+    __table_args__ = (
+        Index("ix_species_updated_at_id", "updated_at", "id"),
+        Index(
+            "ix_species_name_ru_trgm",
+            func.lower(name_ru).label("species_name_ru_trgm"),
+            postgresql_using="gin",
+            postgresql_ops={"species_name_ru_trgm": "gin_trgm_ops"},
+        ),
+        Index(
+            "ix_species_name_latin_trgm",
+            func.lower(name_latin).label("species_name_latin_trgm"),
+            postgresql_using="gin",
+            postgresql_ops={"species_name_latin_trgm": "gin_trgm_ops"},
+        ),
     )

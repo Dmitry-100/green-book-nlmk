@@ -16,4 +16,4 @@ class NotificationResponse(BaseModel):
 
 class NotificationListResponse(BaseModel):
     items: list[NotificationResponse]
-    total: int
+    total: int | None = None

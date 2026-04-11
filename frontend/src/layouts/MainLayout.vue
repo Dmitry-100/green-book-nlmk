@@ -43,11 +43,62 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useAuthStore } from '../stores/auth'
+import api from '../api/client'
 
 const auth = useAuthStore()
-const unreadCount = ref(3)
+const unreadCount = ref(0)
+let pollTimer: number | null = null
+let unreadRequest: Promise<void> | null = null
+let lastUnreadFetchAt = 0
+const MIN_UNREAD_REFRESH_MS = 5000
+
+async function fetchUnreadCount(force = false) {
+  if (!auth.token) {
+    unreadCount.value = 0
+    lastUnreadFetchAt = 0
+    return
+  }
+  const now = Date.now()
+  if (!force && now - lastUnreadFetchAt < MIN_UNREAD_REFRESH_MS) {
+    return
+  }
+  if (unreadRequest) {
+    return unreadRequest
+  }
+
+  unreadRequest = (async () => {
+    try {
+      const { data } = await api.get('/notifications/unread-count')
+      unreadCount.value = data.count || 0
+    } catch {
+      unreadCount.value = 0
+    } finally {
+      lastUnreadFetchAt = Date.now()
+      unreadRequest = null
+    }
+  })()
+  await unreadRequest
+}
+
+onMounted(async () => {
+  await fetchUnreadCount(true)
+  pollTimer = window.setInterval(fetchUnreadCount, 30000)
+})
+
+onUnmounted(() => {
+  if (pollTimer) {
+    window.clearInterval(pollTimer)
+  }
+})
+
+watch(
+  () => auth.token,
+  () => {
+    fetchUnreadCount(true)
+  }
+)
 </script>
 
 <style scoped>

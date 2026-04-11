@@ -1,0 +1,15 @@
+services:
+  backend:
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE is required}
+    restart: unless-stopped
+    env_file: .env
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${UVICORN_WORKERS:-2}
+    ports:
+      - "${STAGING_BACKEND_PORT:-8000}:8000"
+
+  frontend:
+    image: ${FRONTEND_IMAGE:?FRONTEND_IMAGE is required}
+    restart: unless-stopped
+    command: npm run dev -- --host 0.0.0.0 --port 5173
+    ports:
+      - "${STAGING_FRONTEND_PORT:-5173}:5173"

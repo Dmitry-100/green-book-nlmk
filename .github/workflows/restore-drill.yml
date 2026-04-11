@@ -1,0 +1,67 @@
+name: Restore Drill
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "20 4 * * 2"
+
+jobs:
+  restore-drill:
+    runs-on: ubuntu-latest
+    env:
+      POSTGRES_USER: greenbook
+      POSTGRES_PASSWORD: greenbook_dev
+      POSTGRES_DB: greenbook
+      DATABASE_URL: postgresql://greenbook:greenbook_dev@db:5432/greenbook
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ENDPOINT: minio:9000
+      MINIO_BUCKET: greenbook-media
+      AUTH_SECRET_KEY: ci-secret-key
+      AUTH_ALGORITHM: HS256
+      APP_ENV: development
+      ENABLE_DEV_AUTH: true
+      CORS_ORIGINS: http://localhost:5173
+      YMAPS_API_KEY: ci-ymaps
+      API_RATE_LIMIT_ENABLED: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Start stack
+        run: docker compose up -d db redis minio backend
+
+      - name: Wait for backend
+        run: |
+          for i in {1..50}; do
+            if curl -fsS http://localhost:8000/api/health > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs backend
+          exit 1
+
+      - name: Apply migrations
+        run: ./scripts/migrate_db.sh
+
+      - name: Run restore drill
+        env:
+          SMOKE_ADMIN_TOKEN: ${{ secrets.SMOKE_ADMIN_TOKEN }}
+        run: |
+          ./scripts/restore_drill.sh \
+            --base-url http://localhost:8000 \
+            --admin-token "$SMOKE_ADMIN_TOKEN" \
+            --output backups/db/restore_drill_summary.json
+
+      - name: Upload restore drill summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: restore-drill-summary
+          path: backups/db/restore_drill_summary.json
+
+      - name: Stop stack
+        if: always()
+        run: docker compose down -v

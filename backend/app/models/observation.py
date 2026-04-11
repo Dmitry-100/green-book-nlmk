@@ -10,7 +10,9 @@ from sqlalchemy import (
     DateTime,
     Integer,
     ForeignKey,
+    Index,
     func,
+    text as sql_text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -50,8 +52,66 @@ class SensitiveLevel(str, enum.Enum):
     hidden = "hidden"
 
 
+class MediaProcessingStatus(str, enum.Enum):
+    pending = "pending"
+    processing = "processing"
+    ready = "ready"
+    failed = "failed"
+
+
 class Observation(Base):
     __tablename__ = "observations"
+    __table_args__ = (
+        Index("ix_observations_status_created_at", "status", "created_at"),
+        Index("ix_observations_status_observed_at", "status", "observed_at"),
+        Index(
+            "ix_observations_author_status_created_at",
+            "author_id",
+            "status",
+            "created_at",
+        ),
+        Index(
+            "ix_observations_group_status_created_at",
+            "group",
+            "status",
+            "created_at",
+        ),
+        Index(
+            "ix_observations_group_status_observed_at",
+            "group",
+            "status",
+            "observed_at",
+        ),
+        Index(
+            "ix_observations_species_status_observed_at",
+            "species_id",
+            "status",
+            "observed_at",
+        ),
+        Index(
+            "ix_observations_map_visible_observed_at",
+            "observed_at",
+            postgresql_where=sql_text(
+                "status = 'confirmed' AND sensitive_level IN ('open', 'blurred')"
+            ),
+        ),
+        Index(
+            "ix_observations_map_visible_group_observed_at",
+            "group",
+            "observed_at",
+            postgresql_where=sql_text(
+                "status = 'confirmed' AND sensitive_level IN ('open', 'blurred')"
+            ),
+        ),
+        Index(
+            "ix_observations_map_visible_location_gist",
+            "location_point",
+            postgresql_using="gist",
+            postgresql_where=sql_text(
+                "status = 'confirmed' AND sensitive_level IN ('open', 'blurred')"
+            ),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     author_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
@@ -86,6 +146,15 @@ class Observation(Base):
 
 class ObsMedia(Base):
     __tablename__ = "obs_media"
+    __table_args__ = (
+        Index("ix_obs_media_s3_key", "s3_key"),
+        Index("ix_obs_media_thumbnail_key", "thumbnail_key"),
+        Index(
+            "ix_obs_media_processing_status_next_retry",
+            "processing_status",
+            "next_retry_at",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     observation_id: Mapped[int] = mapped_column(
@@ -94,6 +163,15 @@ class ObsMedia(Base):
     s3_key: Mapped[str] = mapped_column(String(500))
     thumbnail_key: Mapped[str | None] = mapped_column(String(500))
     mime_type: Mapped[str] = mapped_column(String(100))
+    processing_status: Mapped[MediaProcessingStatus] = mapped_column(
+        Enum(MediaProcessingStatus),
+        default=MediaProcessingStatus.pending,
+        index=True,
+    )
+    processing_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    next_retry_at: Mapped[datetime | None] = mapped_column(DateTime)
+    processing_error: Mapped[str | None] = mapped_column(Text)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     observation: Mapped["Observation"] = relationship(back_populates="media")

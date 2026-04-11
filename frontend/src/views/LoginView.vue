@@ -25,11 +25,12 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import { useAuthStore } from '../stores/auth'
 
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
 const loading = ref(false)
 const selectedRole = ref('employee')
@@ -57,7 +58,8 @@ async function login() {
       email: data.user.email,
       role: data.user.role,
     })
-    router.push('/')
+    const redirectTo = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
+    router.push(redirectTo)
   } catch (e) {
     console.error(e)
   } finally {

@@ -11,10 +11,9 @@
           <el-option label="Птицы" value="birds" />
           <el-option label="Млекопитающие" value="mammals" />
         </el-select>
-        <el-select v-model="statusFilter" placeholder="Статус" clearable @change="fetchPoints" size="small">
+        <el-select v-model="statusFilter" placeholder="Статус" @change="fetchPoints" size="small">
           <el-option label="Подтверждено" value="confirmed" />
-          <el-option label="На проверке" value="on_review" />
-          <el-option label="Все" value="" />
+          <el-option v-if="auth.isEcologist()" label="На проверке" value="on_review" />
         </el-select>
       </div>
       <div class="map-stats">
@@ -22,6 +21,9 @@
           <span class="map-stat__number">{{ points.length }}</span>
           <span class="map-stat__label">точек на карте</span>
         </div>
+      </div>
+      <div v-if="isMapSampled" class="map-hint">
+        Для текущего масштаба отображается {{ renderedPointsCount }} из {{ points.length }} точек.
       </div>
       <div class="map-legend">
         <h3>Легенда</h3>
@@ -37,7 +39,7 @@
       </div>
       <div class="map-points-list">
         <h3>Наблюдения</h3>
-        <div v-for="p in points" :key="p.properties.id" class="point-item">
+        <div v-for="p in sidebarPoints" :key="p.properties.id" class="point-item">
           <span class="point-icon">{{ groupIcon(p.properties.group) }}</span>
           <div class="point-info">
             <span class="point-id">#{{ p.properties.id }}</span>
@@ -46,6 +48,9 @@
           <span class="point-status" :class="'point-status--' + p.properties.status">
             {{ p.properties.is_incident ? '!' : '' }}
           </span>
+        </div>
+        <div v-if="isSidebarTruncated" class="list-truncated-hint">
+          Показаны последние {{ sidebarPoints.length }} из {{ points.length }} наблюдений.
         </div>
         <div v-if="points.length === 0" class="no-points">Нет наблюдений</div>
       </div>
@@ -63,8 +68,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import api from '../api/client'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import axios from 'axios'
+import api, { getCached } from '../api/client'
+import { loadYmaps } from '../services/ymapsLoader'
+import { useAuthStore } from '../stores/auth'
 
 const mapEl = ref<HTMLElement>()
 const points = ref<any[]>([])
@@ -72,10 +80,21 @@ const mapLoading = ref(true)
 const mapError = ref('')
 const groupFilter = ref('')
 const statusFilter = ref('confirmed')
+const auth = useAuthStore()
 
 let ymaps: any = null
 let map: any = null
 let clusterer: any = null
+let boundsDebounceTimer: number | null = null
+let pointsAbortController: AbortController | null = null
+let pointsRequestSeq = 0
+let activeQueryKey = ''
+let lastCompletedQueryKey = ''
+const renderedPointsCount = ref(0)
+const MAX_SIDEBAR_POINTS = 250
+const sidebarPoints = computed(() => points.value.slice(0, MAX_SIDEBAR_POINTS))
+const isSidebarTruncated = computed(() => points.value.length > MAX_SIDEBAR_POINTS)
+const isMapSampled = computed(() => renderedPointsCount.value > 0 && renderedPointsCount.value < points.value.length)
 
 const GROUP_ICONS: Record<string, string> = { plants: '🌿', fungi: '🍄', insects: '🐛', herpetofauna: '🐍', birds: '🐦', mammals: '🦔' }
 function groupIcon(g: string) { return GROUP_ICONS[g] || '🌱' }
@@ -89,24 +108,6 @@ function getMarkerColor(props: any): string {
   if (props.is_incident) return '#E53935'
   if (props.status === 'on_review') return '#FFC107'
   return '#2A7A6E'
-}
-
-async function loadYmaps(apiKey: string): Promise<any> {
-  if ((window as any).ymaps) {
-    return new Promise(resolve => (window as any).ymaps.ready(() => resolve((window as any).ymaps)))
-  }
-
-  return new Promise((resolve, reject) => {
-    const script = document.createElement('script')
-    script.src = `https://api-maps.yandex.ru/2.1/?apikey=${apiKey}&lang=ru_RU`
-    script.async = true
-
-    script.onload = () => {
-      (window as any).ymaps.ready(() => resolve((window as any).ymaps))
-    }
-    script.onerror = () => reject(new Error('Не удалось загрузить скрипт Яндекс Карт'))
-    document.head.appendChild(script)
-  })
 }
 
 async function initMap(apiKey: string) {
@@ -126,6 +127,14 @@ async function initMap(apiKey: string) {
       clusterBalloonContentLayout: 'cluster#balloonCarousel',
     })
     map.geoObjects.add(clusterer)
+    map.events.add('boundschange', () => {
+      if (boundsDebounceTimer) {
+        window.clearTimeout(boundsDebounceTimer)
+      }
+      boundsDebounceTimer = window.setTimeout(() => {
+        fetchPoints()
+      }, 250)
+    })
 
     mapLoading.value = false
     await updateMarkers()
@@ -141,9 +150,16 @@ async function updateMarkers() {
 
   clusterer.removeAll()
 
-  const placemarks = points.value.map(p => {
+  const renderLimit = resolveRenderablePointLimit()
+  const renderPoints = downsamplePoints(points.value, renderLimit)
+  renderedPointsCount.value = renderPoints.length
+  const zoom = Number(map.getZoom?.())
+  if (!Number.isNaN(zoom) && clusterer?.options?.set) {
+    clusterer.options.set('gridSize', resolveClusterGridSize(zoom, renderPoints.length))
+  }
+
+  const placemarks = renderPoints.map(p => {
     const [lon, lat] = p.geometry.coordinates
-    const color = getMarkerColor(p.properties)
     const icon = groupIcon(p.properties.group)
 
     const placemark = new ymaps.Placemark(
@@ -167,22 +183,119 @@ async function updateMarkers() {
   clusterer.add(placemarks)
 }
 
-async function fetchPoints() {
+function getCurrentBboxParam(): string | null {
+  if (!map) return null
+  const bounds = map.getBounds?.()
+  if (!Array.isArray(bounds) || bounds.length !== 2) return null
+  const southWest = bounds[0]
+  const northEast = bounds[1]
+  if (!Array.isArray(southWest) || !Array.isArray(northEast)) return null
+  const minLat = Number(southWest[0])
+  const minLon = Number(southWest[1])
+  const maxLat = Number(northEast[0])
+  const maxLon = Number(northEast[1])
+  if ([minLon, minLat, maxLon, maxLat].some((value) => Number.isNaN(value))) return null
+  const quantize = (value: number) => Number(value.toFixed(4))
+  return `${quantize(minLon)},${quantize(minLat)},${quantize(maxLon)},${quantize(maxLat)}`
+}
+
+function resolvePointLimit(): number {
+  if (!map) return 1200
+  const zoom = Number(map.getZoom?.())
+  if (Number.isNaN(zoom)) return 1200
+  if (zoom <= 11) return 600
+  if (zoom <= 13) return 900
+  return 1200
+}
+
+function resolveRenderablePointLimit(): number {
+  if (!map) return 1000
+  const zoom = Number(map.getZoom?.())
+  if (Number.isNaN(zoom)) return 1000
+  if (zoom <= 11) return 500
+  if (zoom <= 13) return 800
+  return 1200
+}
+
+function resolveClusterGridSize(zoom: number, pointCount: number): number {
+  if (zoom <= 11 || pointCount > 900) return 96
+  if (zoom <= 13 || pointCount > 600) return 72
+  return 56
+}
+
+function downsamplePoints<T>(items: T[], maxItems: number): T[] {
+  if (items.length <= maxItems) return items
+  const sampled: T[] = []
+  const step = items.length / maxItems
+  for (let i = 0; i < maxItems; i += 1) {
+    sampled.push(items[Math.floor(i * step)])
+  }
+  return sampled
+}
+
+function buildQueryParams() {
+  const params: any = {}
+  if (groupFilter.value) params.group = groupFilter.value
+  if (statusFilter.value) params.status = statusFilter.value
+  const bbox = getCurrentBboxParam()
+  if (bbox) params.bbox = bbox
+  params.limit = resolvePointLimit()
+  const queryKey = [
+    params.group || '',
+    params.status || '',
+    params.bbox || '',
+    String(params.limit),
+  ].join('|')
+  return { params, queryKey }
+}
+
+async function fetchPoints(force = false) {
+  const { params, queryKey } = buildQueryParams()
+  if (!force && (queryKey === lastCompletedQueryKey || queryKey === activeQueryKey)) {
+    return
+  }
+
+  const requestSeq = ++pointsRequestSeq
+  activeQueryKey = queryKey
+  pointsAbortController?.abort()
+  const controller = new AbortController()
+  pointsAbortController = controller
+
   try {
-    const params: any = {}
-    if (groupFilter.value) params.group = groupFilter.value
-    if (statusFilter.value) params.status = statusFilter.value
-    const { data } = await api.get('/map/observations', { params })
+    const { data } = await api.get('/map/observations', {
+      params,
+      signal: controller.signal,
+    })
+    if (requestSeq !== pointsRequestSeq) return
     points.value = data.features || []
+    renderedPointsCount.value = 0
+    lastCompletedQueryKey = queryKey
     await updateMarkers()
-  } catch {
+  } catch (error: any) {
+    if (axios.isCancel(error) || error?.code === 'ERR_CANCELED') {
+      return
+    }
+    if (requestSeq !== pointsRequestSeq) return
     points.value = []
+    renderedPointsCount.value = 0
+  } finally {
+    if (pointsAbortController === controller) {
+      pointsAbortController = null
+    }
+    if (activeQueryKey === queryKey) {
+      activeQueryKey = ''
+    }
   }
 }
 
 onMounted(async () => {
   try {
-    const { data } = await api.get('/config/ymaps')
+    const { data } = await getCached(
+      '/config/ymaps',
+      {},
+      60 * 60 * 1000,
+      'config:ymaps'
+    )
     if (data.apiKey) {
       await initMap(data.apiKey)
     } else {
@@ -193,7 +306,17 @@ onMounted(async () => {
     mapError.value = 'Не удалось получить конфигурацию'
     mapLoading.value = false
   }
-  await fetchPoints()
+  await fetchPoints(true)
+})
+
+onUnmounted(() => {
+  if (boundsDebounceTimer) {
+    window.clearTimeout(boundsDebounceTimer)
+  }
+  pointsAbortController?.abort()
+  if (map) {
+    map.destroy?.()
+  }
 })
 </script>
 
@@ -229,6 +352,11 @@ onMounted(async () => {
 }
 .map-stat__number { font-family: var(--font-display); font-size: 28px; font-weight: 700; color: var(--teal); display: block; }
 .map-stat__label { font-size: 11px; color: var(--slate-mid); }
+.map-hint {
+  font-size: 12px;
+  color: var(--slate-mid);
+  line-height: 1.35;
+}
 .map-legend h3, .map-points-list h3 {
   font-size: 12px;
   font-weight: 700;
@@ -252,6 +380,11 @@ onMounted(async () => {
 .point-status { width: 8px; height: 8px; border-radius: 50%; }
 .point-status--confirmed { background: var(--teal); }
 .point-status--on_review { background: var(--yellow-potential); }
+.list-truncated-hint {
+  font-size: 12px;
+  color: var(--slate-mid);
+  padding: 8px 10px;
+}
 .no-points { text-align: center; padding: 20px; color: var(--slate-light); font-size: 13px; }
 
 .map-container { position: relative; }

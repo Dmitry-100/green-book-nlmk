@@ -27,7 +27,21 @@
           </div>
           <div class="form-group">
             <label>Предполагаемый вид</label>
-            <el-input v-model="form.species_name" placeholder="Начните вводить..." />
+            <el-select
+              v-model="form.species_id"
+              filterable
+              clearable
+              placeholder="Выберите вид (если известен)"
+              style="width: 100%"
+              :disabled="!form.group || speciesLoading"
+            >
+              <el-option
+                v-for="species in speciesOptions"
+                :key="species.id"
+                :label="`${species.name_ru} (${species.name_latin})`"
+                :value="species.id"
+              />
+            </el-select>
           </div>
         </div>
         <div class="form-group" style="margin-top:16px">
@@ -49,7 +63,7 @@
         <div class="photo-upload-area">
           <div v-for="(photo, i) in photos" :key="i" class="photo-preview">
             <img :src="photo.preview" alt="photo" />
-            <button class="photo-remove" @click="photos.splice(i, 1)">&times;</button>
+            <button class="photo-remove" @click.prevent="photos.splice(i, 1)">&times;</button>
           </div>
           <label class="photo-add">
             <input type="file" accept="image/*" multiple @change="onFileSelect" hidden />
@@ -88,6 +102,7 @@
       </div>
 
       <div class="form-actions">
+        <p v-if="submitError" class="submit-error">{{ submitError }}</p>
         <el-button @click="$router.back()">Отмена</el-button>
         <el-button type="primary" @click="submit" :disabled="!canSubmit" :loading="submitting">
           Отправить на проверку
@@ -98,15 +113,31 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
-import api from '../api/client'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import api, { getCached } from '../api/client'
+import { loadYmaps } from '../services/ymapsLoader'
+
+interface SpeciesOption {
+  id: number
+  name_ru: string
+  name_latin: string
+  group: string
+}
 
 const router = useRouter()
 const route = useRoute()
 const submitting = ref(false)
+const submitError = ref('')
 const mapEl = ref<HTMLElement>()
 const photos = ref<{ file: File; preview: string }[]>([])
+const speciesOptions = ref<SpeciesOption[]>([])
+const speciesLoading = ref(false)
+const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+const MAX_MEDIA_ITEMS = 10
+const querySpeciesIdRaw = Number(route.query.species)
+const querySpeciesId = Number.isFinite(querySpeciesIdRaw) && querySpeciesIdRaw > 0 ? querySpeciesIdRaw : null
 
 const groups = [
   { value: 'plants', label: 'Растение', photo: '/api/media/species-pdf/page05_img02.png' },
@@ -120,7 +151,7 @@ const groups = [
 const form = reactive({
   group: (route.query.group as string) || '',
   observed_at: new Date(),
-  species_name: '',
+  species_id: querySpeciesId as number | null,
   comment: '',
   lat: 52.59,
   lon: 39.60,
@@ -130,37 +161,134 @@ const form = reactive({
   safety_checked: false,
 })
 
-const canSubmit = computed(() => form.group && form.safety_checked)
+const canSubmit = computed(() => {
+  if (!form.group || !form.safety_checked || photos.value.length === 0) return false
+  if (form.is_incident && (!form.incident_type || !form.incident_severity)) return false
+  return true
+})
+
+async function loadSpecies(group: string) {
+  if (!group) {
+    speciesOptions.value = []
+    return
+  }
+  speciesLoading.value = true
+  try {
+    const { data } = await getCached(
+      '/species',
+      { params: { group, limit: 200, include_total: false } },
+      5 * 60 * 1000,
+      `species:list:observe:${group}`
+    )
+    speciesOptions.value = data.items || []
+  } catch {
+    speciesOptions.value = []
+  } finally {
+    speciesLoading.value = false
+  }
+}
+
+watch(
+  () => form.group,
+  async (group) => {
+    await loadSpecies(group)
+    if (form.species_id && !speciesOptions.value.some((item) => item.id === form.species_id)) {
+      form.species_id = null
+    }
+  }
+)
 
 function onFileSelect(e: Event) {
   const files = (e.target as HTMLInputElement).files
   if (!files) return
+  submitError.value = ''
   for (const f of Array.from(files)) {
+    if (photos.value.length >= MAX_MEDIA_ITEMS) {
+      submitError.value = `Можно прикрепить не более ${MAX_MEDIA_ITEMS} файлов`
+      break
+    }
+    const mimeType = resolveMimeType(f)
+    if (!mimeType || !ALLOWED_MIME_TYPES.has(mimeType)) {
+      submitError.value = 'Поддерживаются только JPG, PNG и WEBP'
+      continue
+    }
+    if (f.size > MAX_UPLOAD_BYTES) {
+      submitError.value = 'Файл слишком большой. Максимальный размер: 10 МБ'
+      continue
+    }
     photos.value.push({ file: f, preview: URL.createObjectURL(f) })
   }
 }
 
-// Init Yandex Map for point selection
+function resolveMimeType(file: File): string | null {
+  if (file.type) return file.type
+  const ext = file.name.split('.').pop()?.toLowerCase()
+  if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg'
+  if (ext === 'png') return 'image/png'
+  if (ext === 'webp') return 'image/webp'
+  return null
+}
+
+async function uploadMedia(observationId: number) {
+  const mediaPayload: Array<{ s3_key: string; mime_type: string }> = []
+  for (const photo of photos.value) {
+    const mimeType = resolveMimeType(photo.file)
+    if (!mimeType || !ALLOWED_MIME_TYPES.has(mimeType)) {
+      throw new Error('Поддерживаются только JPG, PNG и WEBP')
+    }
+    const { data } = await api.post('/observations/upload-url', {
+      filename: photo.file.name,
+      content_type: mimeType,
+      file_size: photo.file.size,
+    })
+    const uploadResponse = await fetch(data.upload_url, {
+      method: 'PUT',
+      headers: { 'Content-Type': data.content_type || mimeType },
+      body: photo.file,
+    })
+    if (!uploadResponse.ok) {
+      throw new Error('Не удалось загрузить фото')
+    }
+    mediaPayload.push({ s3_key: data.s3_key, mime_type: mimeType })
+  }
+
+  if (mediaPayload.length > 0) {
+    await api.post(`/observations/${observationId}/media`, mediaPayload)
+  }
+}
+
+// Init species and map for point selection.
 onMounted(async () => {
+  if (form.species_id) {
+    try {
+      const { data } = await getCached(
+        `/species/${form.species_id}`,
+        {},
+        5 * 60 * 1000,
+        `species:detail:${form.species_id}`
+      )
+      form.group = data.group
+      await loadSpecies(form.group)
+      if (!speciesOptions.value.some((item) => item.id === data.id)) {
+        speciesOptions.value.unshift(data)
+      }
+    } catch {
+      form.species_id = null
+    }
+  } else if (form.group) {
+    await loadSpecies(form.group)
+  }
+
   try {
-    const { data } = await api.get('/config/ymaps')
+    const { data } = await getCached(
+      '/config/ymaps',
+      {},
+      60 * 60 * 1000,
+      'config:ymaps'
+    )
     if (!data.apiKey) return
 
-    const loadScript = () => new Promise<void>((resolve, reject) => {
-      if ((window as any).ymaps) {
-        (window as any).ymaps.ready(() => resolve())
-        return
-      }
-      const s = document.createElement('script')
-      s.src = `https://api-maps.yandex.ru/2.1/?apikey=${data.apiKey}&lang=ru_RU`
-      s.async = true
-      s.onload = () => (window as any).ymaps.ready(() => resolve())
-      s.onerror = () => reject()
-      document.head.appendChild(s)
-    })
-
-    await loadScript()
-    const ymaps = (window as any).ymaps
+    const ymaps = await loadYmaps(data.apiKey)
 
     const map = new ymaps.Map(mapEl.value!, {
       center: [form.lat, form.lon],
@@ -192,24 +320,27 @@ onMounted(async () => {
 
 async function submit() {
   submitting.value = true
+  submitError.value = ''
   try {
     const payload: any = {
       group: form.group,
       observed_at: new Date(form.observed_at).toISOString(),
       lat: form.lat,
       lon: form.lon,
+      species_id: form.species_id,
       comment: form.comment || null,
       is_incident: form.is_incident,
       safety_checked: form.safety_checked,
     }
     if (form.is_incident) {
-      payload.incident_type = form.incident_type || null
-      payload.incident_severity = form.incident_severity || null
+      payload.incident_type = form.incident_type
+      payload.incident_severity = form.incident_severity
     }
-    await api.post('/observations', payload)
-    router.push('/my')
+    const { data } = await api.post('/observations', payload)
+    await uploadMedia(data.id)
+    router.push(`/observations/${data.id}`)
   } catch (e: any) {
-    console.error(e)
+    submitError.value = e?.response?.data?.detail || e?.message || 'Не удалось отправить наблюдение'
   } finally {
     submitting.value = false
   }
@@ -271,6 +402,12 @@ async function submit() {
 .safety-check { padding: 16px; background: rgba(255,152,0,0.06); border: 1px solid rgba(255,152,0,0.15); border-radius: 12px; }
 .safety-check :deep(.el-checkbox__label) { white-space: normal; word-break: break-word; line-height: 1.5; }
 .form-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
+.submit-error {
+  margin-right: auto;
+  color: #E53935;
+  font-size: 13px;
+  max-width: 320px;
+}
 
 @media (max-width: 768px) {
   .obs-group-grid { grid-template-columns: repeat(2, 1fr); }

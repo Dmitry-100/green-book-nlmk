@@ -1,7 +1,6 @@
 """Gamification trigger logic. Called when an observation is confirmed."""
-from datetime import datetime
 
-from sqlalchemy import func, extract
+from sqlalchemy import extract
 from sqlalchemy.orm import Session
 
 from app.models.gamification import (
@@ -158,7 +157,7 @@ def _check_achievements(user_id: int, obs: Observation, db: Session) -> list[str
     return newly_earned
 
 
-def award_gamification(observation_id: int, db: Session) -> dict:
+def award_gamification(observation_id: int, db: Session, commit: bool = True) -> dict:
     """Main entry point. Call after observation is confirmed.
 
     Returns dict with points, is_first_discovery, new_achievements for logging/notification.
@@ -166,6 +165,20 @@ def award_gamification(observation_id: int, db: Session) -> dict:
     obs = db.query(Observation).filter(Observation.id == observation_id).first()
     if not obs:
         return {}
+
+    # Idempotency guard: do not award base points for the same observation twice.
+    existing_points = (
+        db.query(UserPoints)
+        .filter(UserPoints.observation_id == observation_id)
+        .first()
+    )
+    if existing_points:
+        return {
+            "points": existing_points.points,
+            "reason": existing_points.reason,
+            "is_first_discovery": False,
+            "new_achievements": [],
+        }
 
     species = db.query(Species).filter(Species.id == obs.species_id).first() if obs.species_id else None
 
@@ -184,7 +197,8 @@ def award_gamification(observation_id: int, db: Session) -> dict:
     # 3. Achievements
     new_achievements = _check_achievements(obs.author_id, obs, db)
 
-    db.commit()
+    if commit:
+        db.commit()
 
     return {
         "points": points,

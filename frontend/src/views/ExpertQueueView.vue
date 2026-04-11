@@ -21,7 +21,7 @@
         </div>
 
         <div v-if="activeTab === 'on_review'" class="queue-item__actions">
-          <el-button type="success" size="small" @click="confirm(obs.id)">Подтвердить</el-button>
+          <el-button type="success" size="small" @click="openConfirm(obs)">Подтвердить</el-button>
           <el-button type="warning" size="small" @click="openRequestData(obs.id)">Запросить данные</el-button>
           <el-button type="danger" size="small" @click="openReject(obs.id)">Отклонить</el-button>
         </div>
@@ -29,6 +29,48 @@
     </div>
 
     <div v-if="observations.length === 0 && !loading" class="empty">Очередь пуста</div>
+
+    <!-- Confirm Dialog -->
+    <el-dialog v-model="showConfirmDialog" title="Подтвердить наблюдение" width="460px">
+      <div class="confirm-form">
+        <label>Определённый вид</label>
+        <el-select
+          v-model="confirmForm.species_id"
+          filterable
+          clearable
+          placeholder="Выберите вид"
+          style="width: 100%"
+          :loading="speciesLoading"
+        >
+          <el-option
+            v-for="species in speciesOptions"
+            :key="species.id"
+            :label="`${species.name_ru} (${species.name_latin})`"
+            :value="species.id"
+          />
+        </el-select>
+
+        <label>Чувствительность координат</label>
+        <el-select v-model="confirmForm.sensitive_level" style="width: 100%">
+          <el-option label="Открытые координаты" value="open" />
+          <el-option label="Размытые координаты" value="blurred" />
+          <el-option label="Скрытые координаты" value="hidden" />
+        </el-select>
+
+        <label>Комментарий</label>
+        <el-input
+          v-model="confirmForm.comment"
+          type="textarea"
+          :rows="3"
+          placeholder="Комментарий к решению"
+        />
+        <p v-if="confirmError" class="dialog-error">{{ confirmError }}</p>
+      </div>
+      <template #footer>
+        <el-button @click="showConfirmDialog = false">Отмена</el-button>
+        <el-button type="success" :loading="confirmLoading" @click="confirmSelected">Подтвердить</el-button>
+      </template>
+    </el-dialog>
 
     <!-- Request Data Dialog -->
     <el-dialog v-model="showRequestDialog" title="Запросить уточнения" width="400px">
@@ -51,16 +93,27 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
-import api from '../api/client'
+import { reactive, ref, onMounted } from 'vue'
+import api, { getCached } from '../api/client'
 
 const observations = ref<any[]>([])
 const loading = ref(false)
 const activeTab = ref('on_review')
+const showConfirmDialog = ref(false)
 const showRequestDialog = ref(false)
 const showRejectDialog = ref(false)
 const actionComment = ref('')
 const selectedObsId = ref<number>(0)
+const confirmLoading = ref(false)
+const confirmError = ref('')
+const speciesLoading = ref(false)
+const speciesOptions = ref<any[]>([])
+
+const confirmForm = reactive({
+  species_id: null as number | null,
+  sensitive_level: 'open',
+  comment: '',
+})
 
 const tabs = reactive([
   { value: 'on_review', label: 'Новые', count: 0 },
@@ -77,14 +130,52 @@ function groupLabel(g: string) { return GROUP_LABELS[g] || g }
 
 async function fetchQueue() {
   loading.value = true
-  const { data } = await api.get('/validation/queue', { params: { status: activeTab.value } })
+  const { data } = await api.get('/validation/queue', { params: { status: activeTab.value, include_total: false } })
   observations.value = data.items
   loading.value = false
 }
 
-async function confirm(obsId: number) {
-  await api.post(`/validation/${obsId}/confirm`, { comment: 'Подтверждено' })
-  fetchQueue()
+async function openConfirm(obs: any) {
+  selectedObsId.value = obs.id
+  confirmForm.comment = 'Подтверждено'
+  confirmForm.sensitive_level = obs.sensitive_level || 'open'
+  confirmForm.species_id = obs.species_id || null
+  confirmError.value = ''
+  showConfirmDialog.value = true
+
+  speciesLoading.value = true
+  try {
+    const { data } = await getCached(
+      '/species',
+      { params: { group: obs.group, limit: 200, include_total: false } },
+      5 * 60 * 1000,
+      `species:list:expert:${obs.group}`
+    )
+    speciesOptions.value = data.items || []
+  } catch {
+    speciesOptions.value = []
+  } finally {
+    speciesLoading.value = false
+  }
+}
+
+async function confirmSelected() {
+  confirmLoading.value = true
+  confirmError.value = ''
+  try {
+    const payload: any = {
+      comment: confirmForm.comment || null,
+      sensitive_level: confirmForm.sensitive_level,
+    }
+    if (confirmForm.species_id) payload.species_id = confirmForm.species_id
+    await api.post(`/validation/${selectedObsId.value}/confirm`, payload)
+    showConfirmDialog.value = false
+    await fetchQueue()
+  } catch (e: any) {
+    confirmError.value = e.response?.data?.detail || 'Не удалось подтвердить наблюдение'
+  } finally {
+    confirmLoading.value = false
+  }
 }
 
 function openRequestData(obsId: number) {
@@ -131,4 +222,7 @@ onMounted(fetchQueue)
 .incident-badge { background: rgba(229,57,53,0.1); color: #E53935; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; margin-left: auto; }
 .queue-item__actions { display: flex; gap: 8px; }
 .empty { text-align: center; padding: 60px; color: #8FA5AB; font-size: 16px; }
+.confirm-form { display: flex; flex-direction: column; gap: 10px; }
+.confirm-form label { font-size: 13px; font-weight: 600; color: #2C3E4A; }
+.dialog-error { font-size: 12px; color: #E53935; margin-top: 4px; }
 </style>

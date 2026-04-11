@@ -32,7 +32,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import api from '../api/client'
+import { getCached } from '../api/client'
 import SpeciesCard from '../components/SpeciesCard.vue'
 
 const route = useRoute()
@@ -43,6 +43,7 @@ const search = ref('')
 const groupFilter = ref('')
 const categoryFilter = ref('')
 let debounceTimer: ReturnType<typeof setTimeout>
+const SPECIES_LIST_CACHE_TTL_MS = 60 * 1000
 
 async function fetchSpecies() {
   loading.value = true
@@ -50,10 +51,17 @@ async function fetchSpecies() {
   if (groupFilter.value) params.group = groupFilter.value
   if (categoryFilter.value) params.category = categoryFilter.value
   if (search.value && search.value.length >= 2) params.search = search.value
-  const { data } = await api.get('/species', { params })
-  species.value = data.items
-  total.value = data.total
-  loading.value = false
+  const cacheKey = `species:list:${params.group || ''}:${params.category || ''}:${params.search || ''}:${params.limit}`
+  try {
+    const { data } = await getCached('/species', { params }, SPECIES_LIST_CACHE_TTL_MS, cacheKey)
+    species.value = data.items || []
+    total.value = data.total || 0
+  } catch {
+    species.value = []
+    total.value = 0
+  } finally {
+    loading.value = false
+  }
 }
 
 function debouncedFetch() {

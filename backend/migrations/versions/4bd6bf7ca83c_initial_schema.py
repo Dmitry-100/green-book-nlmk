@@ -149,4 +149,17 @@ def downgrade() -> None:
     op.drop_table('site_zones')
     op.drop_index(op.f('ix_decision_tree_parent_id'), table_name='decision_tree')
     op.drop_table('decision_tree')
+    # Explicitly cleanup enum types so downgrade->upgrade cycle is reproducible.
+    for enum_type in (
+        "notificationtype",
+        "sensitivelevel",
+        "incidentstatus",
+        "incidentseverity",
+        "incidenttype",
+        "observationstatus",
+        "userrole",
+        "speciescategory",
+        "speciesgroup",
+    ):
+        op.execute(f"DROP TYPE IF EXISTS {enum_type}")
     # ### end Alembic commands ###

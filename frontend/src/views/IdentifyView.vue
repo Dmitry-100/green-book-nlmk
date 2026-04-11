@@ -57,7 +57,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import api from '../api/client'
+import { getCached } from '../api/client'
 
 const step = ref(1)
 const selectedGroup = ref('')
@@ -77,8 +77,13 @@ const groups = [
 async function selectGroup(group: string) {
   selectedGroup.value = group
   selectedGroupLabel.value = groups.find(g => g.value === group)?.label || group
-  const { data } = await api.get('/species', { params: { group, limit: 200 } })
-  suggestions.value = data.items
+  const { data } = await getCached(
+    '/species',
+    { params: { group, limit: 200, include_total: false } },
+    5 * 60 * 1000,
+    `species:list:identify:${group}`
+  )
+  suggestions.value = data.items || []
   step.value = 2
 }
 

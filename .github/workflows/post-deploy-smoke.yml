@@ -1,0 +1,30 @@
+name: Post Deploy Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Base URL for deployed API"
+        required: true
+        type: string
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run smoke checks
+        env:
+          BASE_URL: ${{ github.event.inputs.base_url }}
+          SMOKE_ADMIN_TOKEN: ${{ secrets.SMOKE_ADMIN_TOKEN }}
+        run: |
+          python scripts/release_smoke.py \
+            --base-url "$BASE_URL" \
+            --admin-token "$SMOKE_ADMIN_TOKEN"

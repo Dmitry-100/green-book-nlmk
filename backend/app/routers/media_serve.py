@@ -1,9 +1,13 @@
-import os
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
+from sqlalchemy.orm import Session
 
+from app.auth import get_optional_user
+from app.database import get_db
+from app.models.observation import Observation, ObservationStatus, ObsMedia
+from app.models.user import User, UserRole
 from app.services.media import get_s3_client
 from app.config import settings
 
@@ -32,6 +36,37 @@ def _serve_from_minio_or_disk(s3_key: str, fallback_dir: str, filename: str, con
     raise HTTPException(status_code=404, detail="Photo not found")
 
 
+def _can_view_observation_media(observation: Observation, user: User | None) -> bool:
+    if observation.status == ObservationStatus.confirmed:
+        return True
+    if user is None:
+        return False
+    if user.role in (UserRole.ecologist, UserRole.admin):
+        return True
+    return user.id in {observation.author_id, observation.reviewer_id}
+
+
+def _get_observation_by_media_key(
+    *,
+    db: Session,
+    key_field: str,
+    media_key: str,
+) -> Observation | None:
+    if key_field == "s3_key":
+        key_filter = ObsMedia.s3_key == media_key
+    elif key_field == "thumbnail_key":
+        key_filter = ObsMedia.thumbnail_key == media_key
+    else:
+        raise ValueError("Unsupported media key field")
+
+    return (
+        db.query(Observation)
+        .join(ObsMedia, Observation.id == ObsMedia.observation_id)
+        .filter(key_filter)
+        .first()
+    )
+
+
 @router.get("/species/{filename}")
 def serve_species_photo(filename: str):
     return _serve_from_minio_or_disk(f"species/{filename}", "species", filename, "image/jpeg")
@@ -43,5 +78,31 @@ def serve_species_pdf_photo(filename: str):
 
 
 @router.get("/observations/{filename}")
-def serve_observation_photo(filename: str):
-    return _serve_from_minio_or_disk(f"observations/{filename}", "observations", filename, "image/jpeg", 3600)
+def serve_observation_photo(
+    filename: str,
+    user: User | None = Depends(get_optional_user),
+    db: Session = Depends(get_db),
+):
+    s3_key = f"observations/{filename}"
+    obs = _get_observation_by_media_key(db=db, key_field="s3_key", media_key=s3_key)
+    if obs is None or not _can_view_observation_media(obs, user):
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    return _serve_from_minio_or_disk(s3_key, "observations", filename, "image/jpeg", 3600)
+
+
+@router.get("/thumbnails/{filename}")
+def serve_observation_thumbnail(
+    filename: str,
+    user: User | None = Depends(get_optional_user),
+    db: Session = Depends(get_db),
+):
+    thumb_key = f"thumbnails/{filename}"
+    obs = _get_observation_by_media_key(
+        db=db,
+        key_field="thumbnail_key",
+        media_key=thumb_key,
+    )
+    if obs is None or not _can_view_observation_media(obs, user):
+        raise HTTPException(status_code=404, detail="Photo not found")
+    return _serve_from_minio_or_disk(thumb_key, "thumbnails", filename, "image/jpeg", 3600)

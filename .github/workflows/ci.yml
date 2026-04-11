@@ -1,0 +1,219 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+
+jobs:
+  workflow-config:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate workflow YAML files
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml
+          python - <<'PY'
+          import glob
+          import yaml
+
+          for path in glob.glob('.github/workflows/*.yml'):
+              with open(path, 'r', encoding='utf-8') as f:
+                  yaml.safe_load(f)
+          print('workflow YAML parse: ok')
+          PY
+
+      - name: Validate staging compose config
+        run: |
+          BACKEND_IMAGE=ghcr.io/example/backend:test \
+          FRONTEND_IMAGE=ghcr.io/example/frontend:test \
+          docker compose -f docker-compose.staging.yml config > /tmp/staging-compose.yml
+          wc -l /tmp/staging-compose.yml
+
+      - name: Validate rehearsal support compose config
+        run: |
+          docker compose -f docker-compose.rehearsal.yml config > /tmp/rehearsal-compose.yml
+          wc -l /tmp/rehearsal-compose.yml
+
+  security-fast:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate restore drill script interface
+        run: ./scripts/restore_drill.sh --help
+
+      - name: Validate staging deploy rehearsal script interface
+        run: ./scripts/staging_deploy_rehearsal.sh --help
+
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: greenbook_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/greenbook_test
+      REDIS_URL: redis://localhost:6379/0
+      APP_ENV: test
+      ENABLE_DEV_AUTH: false
+      AUTH_SECRET_KEY: ci-secret-key
+      AUTH_ALGORITHM: HS256
+      CORS_ORIGINS: http://localhost:5173
+      MINIO_ROOT_USER: ci-user
+      MINIO_ROOT_PASSWORD: ci-pass
+      API_RATE_LIMIT_ENABLED: false
+      DASHBOARD_SUMMARY_CACHE_TTL_SECONDS: 20
+      GAMIFICATION_STATS_CACHE_TTL_SECONDS: 30
+      MAP_OBSERVATIONS_CACHE_TTL_SECONDS: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Enable PostGIS extension
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -d greenbook_test -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+
+      - name: Migration smoke test
+        working-directory: backend
+        env:
+          PGPASSWORD: postgres
+          MIGRATION_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/greenbook_migration_check
+        run: |
+          psql -h localhost -U postgres -d postgres -c "DROP DATABASE IF EXISTS greenbook_migration_check;"
+          psql -h localhost -U postgres -d postgres -c "CREATE DATABASE greenbook_migration_check;"
+          psql -h localhost -U postgres -d greenbook_migration_check -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+          DATABASE_URL=$MIGRATION_DATABASE_URL alembic upgrade head
+          DATABASE_URL=$MIGRATION_DATABASE_URL alembic downgrade base
+          DATABASE_URL=$MIGRATION_DATABASE_URL alembic upgrade head
+          DATABASE_URL=$MIGRATION_DATABASE_URL alembic check
+
+      - name: Run backend lint (ruff)
+        working-directory: backend
+        run: ruff check app tests
+
+      - name: Run backend tests
+        working-directory: backend
+        run: |
+          mkdir -p ../coverage
+          pytest -q --cov=app --cov-report=term-missing --cov-report=xml:../coverage/backend-coverage.xml
+
+      - name: Upload backend coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: coverage/backend-coverage.xml
+
+      - name: Start backend API for perf smoke
+        working-directory: backend
+        run: |
+          uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/uvicorn-perf.log 2>&1 &
+          echo $! > /tmp/uvicorn-perf.pid
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:8000/api/health > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Backend API did not start in time"
+          cat /tmp/uvicorn-perf.log || true
+          exit 1
+
+      - name: Run backend perf smoke
+        run: python scripts/perf_smoke_ci.py --base-url http://127.0.0.1:8000
+
+      - name: Run backend release smoke (public endpoints)
+        run: python scripts/release_smoke.py --base-url http://127.0.0.1:8000
+
+      - name: Stop backend API
+        if: always()
+        run: |
+          if [ -f /tmp/uvicorn-perf.pid ]; then
+            kill "$(cat /tmp/uvicorn-perf.pid)" || true
+          fi
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run frontend unit tests
+        working-directory: frontend
+        run: npm run test:unit:coverage
+
+      - name: Upload frontend coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage/lcov.info
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        run: docker build -t green-book-backend-ci ./backend
+
+      - name: Build frontend image
+        run: docker build -t green-book-frontend-ci ./frontend

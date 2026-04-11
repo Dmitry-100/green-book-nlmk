@@ -2,10 +2,9 @@
 Usage: docker compose exec backend python -m app.seed.seed_demo
 Run AFTER run_seed.py and seed_achievements.py.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 
 from geoalchemy2.elements import WKTElement
-from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models.user import User, UserRole
@@ -100,7 +99,7 @@ def seed_demo():
                 is_incident=False,
                 safety_checked=True,
                 reviewer_id=users[1].id,  # ecologist
-                reviewed_at=datetime.utcnow(),
+                reviewed_at=datetime.now(timezone.utc),
             )
             db.add(obs)
             obs_list.append(obs)
@@ -144,7 +143,7 @@ def seed_demo():
         print(f"  Recorded {len(obs_list)} first discoveries")
 
         db.commit()
-        print(f"Demo data seeded successfully!")
+        print("Demo data seeded successfully!")
     finally:
         db.close()
 

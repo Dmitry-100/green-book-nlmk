@@ -124,7 +124,11 @@
       </div>
       <div class="news-feed">
         <router-link v-for="o in recentObs" :key="o.id" :to="`/observations/${o.id}`" class="news-item">
-          <div class="news-item__thumb" v-if="o.media?.length" :style="{ backgroundImage: `url(/api/media/${o.media[0].s3_key})` }"></div>
+          <div
+            class="news-item__thumb"
+            v-if="o.media?.length"
+            :style="{ backgroundImage: `url(/api/media/${observationPreviewMediaKey(o)})` }"
+          ></div>
           <div class="news-item__icon" v-else>{{ groupIcon(o.group) }}</div>
           <div class="news-item__body">
             <div class="news-item__title">{{ groupLabel(o.group) }}</div>
@@ -140,13 +144,16 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import api from '../api/client'
+import { getCached } from '../api/client'
+import { useAuthStore } from '../stores/auth'
 
 const stats = reactive({ species: 0, confirmed: 0, on_review: 0, total_obs: 0 })
 const recentSpecies = ref<any[]>([])
 const factOfDay = ref<any>(null)
 const challenge = ref<any>(null)
 const recentObs = ref<any[]>([])
+const auth = useAuthStore()
+const DASHBOARD_CACHE_TTL_MS = 15 * 1000
 
 const groups = [
   { value: 'plants', icon: '🌿', label: 'Растения', count: 0, photo: '/api/media/species-pdf/page05_img02.png' },
@@ -173,39 +180,56 @@ function formatNewsDate(iso: string) {
   return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}, ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`
 }
 
+function observationPreviewMediaKey(observation: any) {
+  const media = observation?.media?.[0]
+  if (!media) return ''
+  return media.thumbnail_key || media.s3_key
+}
+
+function applySummary(data: any) {
+  stats.species = data.stats?.species || 0
+  stats.confirmed = data.stats?.confirmed || 0
+  stats.on_review = data.stats?.on_review || 0
+  stats.total_obs = data.stats?.total_obs || 0
+
+  recentSpecies.value = data.recent_species || []
+  recentObs.value = data.recent_observations || []
+  factOfDay.value = data.fact_of_day || null
+  challenge.value = data.challenge || null
+
+  const groupCounts = data.species_by_group || {}
+  for (const g of groups) {
+    g.count = groupCounts[g.value] || 0
+  }
+}
+
+function applyEmptySummary() {
+  stats.species = 0
+  stats.confirmed = 0
+  stats.on_review = 0
+  stats.total_obs = 0
+  recentSpecies.value = []
+  recentObs.value = []
+  factOfDay.value = null
+  challenge.value = null
+  for (const g of groups) {
+    g.count = 0
+  }
+}
+
 onMounted(async () => {
   try {
-    const { data } = await api.get('/species', { params: { limit: 200 } })
-    stats.species = data.total
-    recentSpecies.value = data.items.slice(0, 8)
-    for (const g of groups) {
-      g.count = data.items.filter((s: any) => s.group === g.value).length
-    }
-  } catch {}
-  try {
-    const { data } = await api.get('/observations', { params: { limit: 1 } })
-    stats.total_obs = data.total
-  } catch {}
-  try {
-    const { data } = await api.get('/observations', { params: { status: 'confirmed', limit: 1 } })
-    stats.confirmed = data.total
-  } catch {}
-  try {
-    const { data } = await api.get('/observations', { params: { status: 'on_review', limit: 1 } })
-    stats.on_review = data.total
-  } catch {}
-  try {
-    const { data } = await api.get('/gamification/fact-of-day')
-    if (data.species_id) factOfDay.value = data
-  } catch {}
-  try {
-    const { data } = await api.get('/gamification/challenge')
-    if (data.species) challenge.value = data
-  } catch {}
-  try {
-    const { data } = await api.get('/observations', { params: { status: 'confirmed', limit: 5 } })
-    recentObs.value = data.items || []
-  } catch {}
+    const viewerScope = auth.user?.id ? `user:${auth.user.id}` : 'guest'
+    const { data } = await getCached(
+      '/dashboard/summary',
+      {},
+      DASHBOARD_CACHE_TTL_MS,
+      `dashboard:summary:${viewerScope}`
+    )
+    applySummary(data)
+  } catch {
+    applyEmptySummary()
+  }
 })
 </script>
 

@@ -1,0 +1,57 @@
+name: Maintenance Smoke
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "15 3 * * 1"
+
+jobs:
+  maintenance-smoke:
+    runs-on: ubuntu-latest
+    env:
+      POSTGRES_USER: greenbook
+      POSTGRES_PASSWORD: greenbook_dev
+      POSTGRES_DB: greenbook
+      DATABASE_URL: postgresql://greenbook:greenbook_dev@db:5432/greenbook
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ENDPOINT: minio:9000
+      MINIO_BUCKET: greenbook-media
+      AUTH_SECRET_KEY: ci-secret-key
+      AUTH_ALGORITHM: HS256
+      APP_ENV: development
+      ENABLE_DEV_AUTH: true
+      CORS_ORIGINS: http://localhost:5173
+      YMAPS_API_KEY: ci-ymaps
+      AUDIT_LOG_RETENTION_DAYS: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Start stack
+        run: docker compose up -d db redis minio backend
+
+      - name: Wait for backend
+        run: |
+          for i in {1..40}; do
+            if curl -fsS http://localhost:8000/api/health > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs backend
+          exit 1
+
+      - name: Apply migrations
+        run: ./scripts/migrate_db.sh
+
+      - name: Run maintenance dry-run
+        run: ./scripts/maintenance_daily.sh --dry-run
+
+      - name: Run maintenance real
+        run: ./scripts/maintenance_daily.sh --skip-backup
+
+      - name: Stop stack
+        if: always()
+        run: docker compose down -v

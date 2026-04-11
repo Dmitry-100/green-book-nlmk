@@ -15,7 +15,7 @@ def update_photos():
             if sp:
                 sp.photo_urls = photos
         db.commit()
-        updated = db.query(Species).filter(Species.photo_urls != None).count()
+        updated = db.query(Species).filter(Species.photo_urls.is_not(None)).count()
         print(f"Updated {updated} species with photos.")
     finally:
         db.close()

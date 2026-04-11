@@ -1,0 +1,52 @@
+name: Deploy Rehearsal
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 5 * * 3"
+
+jobs:
+  rehearsal:
+    runs-on: ubuntu-latest
+    env:
+      POSTGRES_USER: greenbook
+      POSTGRES_PASSWORD: greenbook_dev
+      POSTGRES_DB: greenbook
+      DATABASE_URL: postgresql://greenbook:greenbook_dev@db:5432/greenbook
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ENDPOINT: minio:9000
+      MINIO_BUCKET: greenbook-media
+      AUTH_SECRET_KEY: ci-secret-key
+      AUTH_ALGORITHM: HS256
+      APP_ENV: development
+      ENABLE_DEV_AUTH: true
+      CORS_ORIGINS: http://localhost:5173
+      YMAPS_API_KEY: ci-ymaps
+      API_RATE_LIMIT_ENABLED: false
+      PROJECT_NAME: gha-rehearsal
+      STAGING_BACKEND_PORT: 18000
+      STAGING_FRONTEND_PORT: 15173
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run staging deploy rollback rehearsal
+        run: |
+          ./scripts/staging_deploy_rehearsal.sh \
+            --base-url http://127.0.0.1:18000 \
+            --output backups/db/deploy_rehearsal_summary.json
+
+      - name: Upload rehearsal summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-rehearsal-summary
+          path: backups/db/deploy_rehearsal_summary.json
+
+      - name: Stop rehearsal stack
+        if: always()
+        run: |
+          docker compose -p "$PROJECT_NAME" -f docker-compose.staging.yml down -v --remove-orphans || true
+          docker compose -p "$PROJECT_NAME" -f docker-compose.rehearsal.yml down -v --remove-orphans || true

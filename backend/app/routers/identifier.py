@@ -1,22 +1,39 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.decision_tree import DecisionTreeNode
-from app.models.species import Species
+from app.models.species import Species, SpeciesGroup
 
 router = APIRouter(prefix="/api/identifier", tags=["identifier"])
 
 
+class SuggestRequest(BaseModel):
+    species_ids: list[Annotated[int, Field(gt=0)]] = Field(
+        min_length=1,
+        max_length=100,
+    )
+
+    @field_validator("species_ids")
+    @classmethod
+    def _ensure_unique_ids(cls, value: list[int]) -> list[int]:
+        if len(set(value)) != len(value):
+            raise ValueError("species_ids must not contain duplicates")
+        return value
+
+
 @router.get("/tree")
 def get_tree(
-    group: str = Query(...),
+    group: SpeciesGroup = Query(...),
     parent_id: int | None = None,
     db: Session = Depends(get_db),
 ):
-    query = db.query(DecisionTreeNode).filter(DecisionTreeNode.group == group)
+    query = db.query(DecisionTreeNode).filter(DecisionTreeNode.group == group.value)
     if parent_id is None:
-        query = query.filter(DecisionTreeNode.parent_id == None)
+        query = query.filter(DecisionTreeNode.parent_id.is_(None))
     else:
         query = query.filter(DecisionTreeNode.parent_id == parent_id)
     nodes = query.order_by(DecisionTreeNode.sort_order).all()
@@ -33,10 +50,10 @@ def get_tree(
 
 @router.post("/suggest")
 def suggest_species(
-    species_ids: list[int],
+    data: SuggestRequest,
     db: Session = Depends(get_db),
 ):
-    species = db.query(Species).filter(Species.id.in_(species_ids)).all()
+    species = db.query(Species).filter(Species.id.in_(data.species_ids)).all()
     return [
         {
             "id": s.id,

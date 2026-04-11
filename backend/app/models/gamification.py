@@ -1,7 +1,15 @@
-import enum
 from datetime import datetime
 
-from sqlalchemy import String, Integer, Text, Enum, Boolean, DateTime, ForeignKey, func, UniqueConstraint
+from sqlalchemy import (
+    String,
+    Integer,
+    Text,
+    DateTime,
+    ForeignKey,
+    Index,
+    func,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -43,6 +51,7 @@ class UserPoints(Base):
     points: Mapped[int] = mapped_column(Integer)
     reason: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    __table_args__ = (Index("ix_user_points_created_at_user_id", "created_at", "user_id"),)
 
 
 class SpeciesFirstDiscovery(Base):
@@ -65,6 +74,13 @@ class ObservationComment(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     text: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    __table_args__ = (
+        Index(
+            "ix_observation_comments_observation_created_at",
+            "observation_id",
+            "created_at",
+        ),
+    )
 
 
 class ObservationLike(Base):

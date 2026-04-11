@@ -17,7 +17,7 @@ def download_photos():
     s3 = get_s3_client()
 
     species_with_photos = db.query(Species).filter(
-        Species.photo_urls != None
+        Species.photo_urls.is_not(None)
     ).all()
 
     updated = 0
