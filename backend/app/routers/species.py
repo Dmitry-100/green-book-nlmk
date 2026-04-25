@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -13,19 +15,26 @@ from app.schemas.species import (
     SpeciesResponse,
     SpeciesUpdate,
 )
+from app.services.catalog_quality import SHORT_DESCRIPTION_MIN_CHARS
 from app.services.audit import audit_event
 from app.services.cache import KeyedTTLCache, RedisKeyedTTLCache
 
 router = APIRouter(prefix="/api/species", tags=["species"])
+SpeciesQualityGap = Literal[
+    "missing_photo",
+    "missing_description",
+    "short_description",
+    "missing_audio",
+]
 _SPECIES_LIST_CACHE = KeyedTTLCache[
-    tuple[str | None, str | None, str | None, int, int, bool],
+    tuple[str | None, str | None, str | None, bool | None, str | None, int, int, bool],
     dict,
 ](
     settings.species_list_cache_ttl_seconds,
     max_entries=256,
 )
 _SPECIES_LIST_REDIS_CACHE = RedisKeyedTTLCache[
-    tuple[str | None, str | None, str | None, int, int, bool],
+    tuple[str | None, str | None, str | None, bool | None, str | None, int, int, bool],
     dict,
 ](
     redis_url=settings.redis_url,
@@ -47,6 +56,8 @@ def _build_species_list_payload(
     group: SpeciesGroup | None,
     category: SpeciesCategory | None,
     normalized_search: str | None,
+    has_audio: bool | None,
+    quality_gap: SpeciesQualityGap | None,
     skip: int,
     limit: int,
     include_total: bool,
@@ -62,6 +73,27 @@ def _build_species_list_payload(
             (func.lower(Species.name_ru).like(search_term))
             | (func.lower(Species.name_latin).like(search_term))
         )
+    if has_audio is True:
+        query = query.filter(Species.audio_url.is_not(None), Species.audio_url != "")
+    elif has_audio is False:
+        query = query.filter((Species.audio_url.is_(None)) | (Species.audio_url == ""))
+    if quality_gap == "missing_photo":
+        query = query.filter(
+            func.coalesce(func.array_length(Species.photo_urls, 1), 0) == 0
+        )
+    elif quality_gap == "missing_description":
+        query = query.filter(
+            (Species.description.is_(None))
+            | (func.length(func.btrim(Species.description)) == 0)
+        )
+    elif quality_gap == "short_description":
+        query = query.filter(
+            Species.description.is_not(None),
+            func.length(func.btrim(Species.description)) > 0,
+            func.length(func.btrim(Species.description)) < SHORT_DESCRIPTION_MIN_CHARS,
+        )
+    elif quality_gap == "missing_audio":
+        query = query.filter((Species.audio_url.is_(None)) | (Species.audio_url == ""))
     total = query.count() if include_total else None
     items = query.order_by(Species.name_ru).offset(skip).limit(limit).all()
     return {
@@ -78,6 +110,8 @@ def list_species(
     group: SpeciesGroup | None = None,
     category: SpeciesCategory | None = None,
     search: str | None = Query(None, min_length=2, max_length=100),
+    has_audio: bool | None = Query(None),
+    quality_gap: SpeciesQualityGap | None = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     include_total: bool = Query(True),
@@ -90,6 +124,8 @@ def list_species(
             group.value if group else None,
             category.value if category else None,
             normalized_search,
+            has_audio,
+            quality_gap,
             skip,
             limit,
             include_total,
@@ -101,6 +137,8 @@ def list_species(
                 group=group,
                 category=category,
                 normalized_search=normalized_search,
+                has_audio=has_audio,
+                quality_gap=quality_gap,
                 skip=skip,
                 limit=limit,
                 include_total=include_total,
@@ -112,6 +150,8 @@ def list_species(
         group=group,
         category=category,
         normalized_search=normalized_search,
+        has_audio=has_audio,
+        quality_gap=quality_gap,
         skip=skip,
         limit=limit,
         include_total=include_total,

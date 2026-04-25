@@ -15,6 +15,10 @@ class SpeciesBase(BaseModel):
     do_dont_rules: str | None = Field(default=None, max_length=10000)
     qr_url: str | None = Field(default=None, max_length=500)
     photo_urls: list[str] | None = Field(default=None, min_length=1, max_length=20)
+    audio_url: str | None = Field(default=None, max_length=500)
+    audio_title: str | None = Field(default=None, max_length=255)
+    audio_source: str | None = Field(default=None, max_length=255)
+    audio_license: str | None = Field(default=None, max_length=255)
 
     @field_validator("name_ru", "name_latin", mode="before")
     @classmethod
@@ -32,6 +36,9 @@ class SpeciesBase(BaseModel):
         "description",
         "do_dont_rules",
         "qr_url",
+        "audio_title",
+        "audio_source",
+        "audio_license",
         mode="before",
     )
     @classmethod
@@ -57,6 +64,25 @@ class SpeciesBase(BaseModel):
                 raise ValueError("photo_urls items must be at most 500 chars")
             normalized.append(url)
         return normalized
+
+    @field_validator("audio_url", mode="before")
+    @classmethod
+    def _normalize_audio_url(cls, value):
+        if value is None:
+            return None
+        if isinstance(value, str):
+            value = value.strip()
+            return value or None
+        return value
+
+    @field_validator("audio_url")
+    @classmethod
+    def _validate_audio_url(cls, value: str | None):
+        if value is None:
+            return None
+        if not (value.startswith("https://") or value.startswith("/api/media/")):
+            raise ValueError("audio_url must be https:// or /api/media/")
+        return value
 
 
 class SpeciesCreate(SpeciesBase):
@@ -76,6 +102,10 @@ class SpeciesUpdate(BaseModel):
     do_dont_rules: str | None = Field(default=None, max_length=10000)
     qr_url: str | None = Field(default=None, max_length=500)
     photo_urls: list[str] | None = Field(default=None, min_length=1, max_length=20)
+    audio_url: str | None = Field(default=None, max_length=500)
+    audio_title: str | None = Field(default=None, max_length=255)
+    audio_source: str | None = Field(default=None, max_length=255)
+    audio_license: str | None = Field(default=None, max_length=255)
 
     @field_validator("name_ru", "name_latin", mode="before")
     @classmethod
@@ -93,6 +123,9 @@ class SpeciesUpdate(BaseModel):
         "description",
         "do_dont_rules",
         "qr_url",
+        "audio_title",
+        "audio_source",
+        "audio_license",
         mode="before",
     )
     @classmethod
@@ -118,6 +151,25 @@ class SpeciesUpdate(BaseModel):
                 raise ValueError("photo_urls items must be at most 500 chars")
             normalized.append(url)
         return normalized
+
+    @field_validator("audio_url", mode="before")
+    @classmethod
+    def _normalize_audio_url(cls, value):
+        if value is None:
+            return None
+        if isinstance(value, str):
+            value = value.strip()
+            return value or None
+        return value
+
+    @field_validator("audio_url")
+    @classmethod
+    def _validate_audio_url(cls, value: str | None):
+        if value is None:
+            return None
+        if not (value.startswith("https://") or value.startswith("/api/media/")):
+            raise ValueError("audio_url must be https:// or /api/media/")
+        return value
 
 
 class SpeciesResponse(SpeciesBase):

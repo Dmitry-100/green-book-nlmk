@@ -21,6 +21,9 @@
         <el-option label="Красная книга" value="red_book" />
         <el-option label="Синантроп" value="synanthropic" />
       </el-select>
+      <el-checkbox v-model="hasAudio" class="species-page__audio-filter" @change="fetchSpecies">
+        С голосом
+      </el-checkbox>
     </div>
     <div class="species-grid">
       <SpeciesCard v-for="s in species" :key="s.id" :species="s" />
@@ -42,6 +45,7 @@ const loading = ref(false)
 const search = ref('')
 const groupFilter = ref('')
 const categoryFilter = ref('')
+const hasAudio = ref(false)
 let debounceTimer: ReturnType<typeof setTimeout>
 const SPECIES_LIST_CACHE_TTL_MS = 60 * 1000
 
@@ -51,7 +55,8 @@ async function fetchSpecies() {
   if (groupFilter.value) params.group = groupFilter.value
   if (categoryFilter.value) params.category = categoryFilter.value
   if (search.value && search.value.length >= 2) params.search = search.value
-  const cacheKey = `species:list:${params.group || ''}:${params.category || ''}:${params.search || ''}:${params.limit}`
+  if (hasAudio.value) params.has_audio = true
+  const cacheKey = `species:list:${params.group || ''}:${params.category || ''}:${params.search || ''}:${params.has_audio || ''}:${params.limit}`
   try {
     const { data } = await getCached('/species', { params }, SPECIES_LIST_CACHE_TTL_MS, cacheKey)
     species.value = data.items || []
@@ -79,6 +84,7 @@ onMounted(() => {
   if (route.query.group) {
     groupFilter.value = route.query.group as string
   }
+  hasAudio.value = route.query.has_audio === 'true'
   fetchSpecies()
 })
 </script>
@@ -89,6 +95,7 @@ onMounted(() => {
 .species-page__header h1 { font-family: 'Cormorant Garamond', serif; font-size: 30px; font-weight: 600; color: #1B4D4F; }
 .species-page__header p { font-size: 14px; color: #8FA5AB; margin-top: 4px; }
 .species-page__filters { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+.species-page__audio-filter { min-height: 32px; display: inline-flex; align-items: center; }
 .species-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
 .species-page__empty { text-align: center; padding: 60px 20px; color: #8FA5AB; font-size: 16px; }
 </style>

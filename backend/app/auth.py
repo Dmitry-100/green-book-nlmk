@@ -10,6 +10,13 @@ from app.observability import user_id_ctx_var
 
 security = HTTPBearer()
 optional_security = HTTPBearer(auto_error=False)
+DEMO_USER_DISPLAY_NAME = "Дмитрий Максимович Сотников"
+STALE_DEMO_DISPLAY_NAMES = {
+    "Сотников Д.С.",
+    "Dev employee",
+    "Dev ecologist",
+    "Dev admin",
+}
 
 
 def _decode_token(token: str) -> dict:
@@ -40,6 +47,16 @@ def _resolve_role(payload: dict, fallback: UserRole = UserRole.employee) -> User
     return fallback
 
 
+def _normalize_dev_display_name(value: str | None) -> str | None:
+    if not value:
+        return value
+
+    normalized = value.strip()
+    if normalized in STALE_DEMO_DISPLAY_NAMES:
+        return DEMO_USER_DISPLAY_NAME
+    return normalized
+
+
 def _get_or_create_user(payload: dict, db: Session) -> User:
     external_id = payload["sub"]
     user = db.query(User).filter(User.external_id == external_id).first()
@@ -57,10 +74,36 @@ def _get_or_create_user(payload: dict, db: Session) -> User:
         db.refresh(user)
         return user
 
-    # In development we keep DB role aligned with selected dev token role.
+    # In development we keep DB identity aligned with selected dev token.
     desired_role = _resolve_role(payload, fallback=user.role)
+    claimed_name = payload.get("name")
+    claimed_email = payload.get("email")
+    should_align_dev_identity = settings.app_env in {"development", "test"}
+    changed = False
+    if should_align_dev_identity and isinstance(claimed_name, str):
+        claimed_name = _normalize_dev_display_name(claimed_name)
+
     if desired_role != user.role:
         user.role = desired_role
+        changed = True
+    if (
+        should_align_dev_identity
+        and isinstance(claimed_name, str)
+        and claimed_name
+        and user.display_name != claimed_name
+    ):
+        user.display_name = claimed_name
+        changed = True
+    if (
+        should_align_dev_identity
+        and isinstance(claimed_email, str)
+        and claimed_email
+        and user.email != claimed_email
+    ):
+        user.email = claimed_email
+        changed = True
+
+    if changed:
         db.commit()
         db.refresh(user)
     return user

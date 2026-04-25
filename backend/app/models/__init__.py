@@ -4,6 +4,7 @@ from app.models.observation import Observation, ObsMedia
 from app.models.site_zone import SiteZone
 from app.models.notification import Notification
 from app.models.audit_log import AuditLog
+from app.models.catalog_import import CatalogImportBatch
 from app.models.decision_tree import DecisionTreeNode
 from app.models.gamification import (
     Achievement, UserAchievement, UserPoints, SpeciesFirstDiscovery,
@@ -18,6 +19,7 @@ __all__ = [
     "SiteZone",
     "Notification",
     "AuditLog",
+    "CatalogImportBatch",
     "DecisionTreeNode",
     "Achievement",
     "UserAchievement",

@@ -91,6 +91,33 @@
       </div>
     </div>
 
+    <!-- Community -->
+    <div class="section" v-if="community?.leaders?.length || community?.active_observers">
+      <div class="section-header">
+        <h2 class="section-title">Друиды компании</h2>
+        <router-link to="/profile" class="section-link">Рейтинг &rarr;</router-link>
+      </div>
+      <div class="community-panel">
+        <div class="community-panel__intro">
+          <div class="community-panel__kicker">Сообщество наблюдателей</div>
+          <h3>{{ community.active_observers || 0 }} участников уже внесли вклад</h3>
+          <p>Подтверждённые находки, первые открытия и внимательность к деталям двигают Зелёную книгу вперёд.</p>
+        </div>
+        <div class="community-leaders" v-if="community.leaders?.length">
+          <div v-for="(leader, index) in community.leaders" :key="leader.user_id" class="community-leader">
+            <div class="community-leader__rank" :class="leaderRankClass(index)">{{ index + 1 }}</div>
+            <div class="community-leader__body">
+              <div class="community-leader__name">{{ leader.display_name }}</div>
+              <div class="community-leader__meta">{{ leader.total_points }} баллов</div>
+            </div>
+          </div>
+        </div>
+        <div class="community-panel__empty" v-else>
+          Первые наблюдения скоро появятся здесь.
+        </div>
+      </div>
+    </div>
+
     <!-- Recent species -->
     <div class="section">
       <div class="section-header">
@@ -110,6 +137,7 @@
             <div class="species-card__tags">
               <span class="tag tag--group">{{ groupLabel(s.group) }}</span>
               <span v-if="s.category === 'red_book'" class="tag tag--redbook">Красная книга</span>
+              <span v-if="s.audio_url" class="tag tag--audio">Есть голос</span>
             </div>
           </div>
         </div>
@@ -152,6 +180,7 @@ const recentSpecies = ref<any[]>([])
 const factOfDay = ref<any>(null)
 const challenge = ref<any>(null)
 const recentObs = ref<any[]>([])
+const community = ref<any>({ active_observers: 0, leaders: [] })
 const auth = useAuthStore()
 const DASHBOARD_CACHE_TTL_MS = 15 * 1000
 
@@ -186,6 +215,13 @@ function observationPreviewMediaKey(observation: any) {
   return media.thumbnail_key || media.s3_key
 }
 
+function leaderRankClass(index: number) {
+  if (index === 0) return 'community-leader__rank--gold'
+  if (index === 1) return 'community-leader__rank--silver'
+  if (index === 2) return 'community-leader__rank--bronze'
+  return ''
+}
+
 function applySummary(data: any) {
   stats.species = data.stats?.species || 0
   stats.confirmed = data.stats?.confirmed || 0
@@ -196,6 +232,7 @@ function applySummary(data: any) {
   recentObs.value = data.recent_observations || []
   factOfDay.value = data.fact_of_day || null
   challenge.value = data.challenge || null
+  community.value = data.community || { active_observers: 0, leaders: [] }
 
   const groupCounts = data.species_by_group || {}
   for (const g of groups) {
@@ -212,6 +249,7 @@ function applyEmptySummary() {
   recentObs.value = []
   factOfDay.value = null
   challenge.value = null
+  community.value = { active_observers: 0, leaders: [] }
   for (const g of groups) {
     g.count = 0
   }
@@ -521,6 +559,82 @@ onMounted(async () => {
 .fact-banner__latin { font-family: var(--font-display); font-style: italic; color: rgba(255,255,255,0.7); margin-bottom: 12px; }
 .fact-banner__body p { font-size: 14px; color: rgba(255,255,255,0.85); line-height: 1.7; margin-bottom: 16px; }
 
+/* Community */
+.community-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 380px);
+  gap: 18px;
+  align-items: stretch;
+  background: #F7FAFA;
+  border: 1px solid rgba(42,122,110,0.14);
+  border-radius: 8px;
+  padding: 22px;
+  box-shadow: 0 2px 12px rgba(44,62,74,0.06);
+}
+.community-panel__intro { display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+.community-panel__kicker {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--teal);
+  margin-bottom: 8px;
+}
+.community-panel h3 {
+  font-family: var(--font-display);
+  font-size: 30px;
+  line-height: 1.15;
+  color: var(--teal-dark);
+  margin-bottom: 8px;
+}
+.community-panel p {
+  max-width: 520px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #4A6572;
+}
+.community-leaders { display: flex; flex-direction: column; gap: 8px; }
+.community-leader {
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  gap: 12px;
+  align-items: center;
+  min-height: 58px;
+  border-radius: 8px;
+  background: white;
+  border: 1px solid rgba(74,101,114,0.10);
+  padding: 10px 12px;
+}
+.community-leader__rank {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #D6E0E3;
+  color: #1B4D4F;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+}
+.community-leader__rank--gold { background: #F4CF62; color: #543E04; }
+.community-leader__rank--silver { background: #D7DEE2; color: #344955; }
+.community-leader__rank--bronze { background: #D69A63; color: #3F2815; }
+.community-leader__body { min-width: 0; }
+.community-leader__name { font-size: 14px; font-weight: 700; color: #2C3E4A; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.community-leader__meta { font-size: 12px; color: #6D838B; margin-top: 2px; }
+.community-panel__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  border-radius: 8px;
+  background: white;
+  color: #6D838B;
+  font-size: 14px;
+}
+
 /* Species Grid */
 .species-grid {
   display: grid;
@@ -555,6 +669,7 @@ onMounted(async () => {
 .tag { padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; }
 .tag--group { background: rgba(42,122,110,0.1); color: var(--teal); }
 .tag--redbook { background: rgba(229,57,53,0.1); color: var(--red-reference); }
+.tag--audio { background: rgba(72,111,125,0.14); color: var(--teal-dark); }
 
 /* News Feed */
 .news-feed { display: flex; flex-direction: column; gap: 8px; }
@@ -605,6 +720,7 @@ onMounted(async () => {
   .hero__gradient-left { width: 100%; }
   .quick-grid { grid-template-columns: repeat(3, 1fr); }
   .spotlight { grid-template-columns: 1fr; }
+  .community-panel { grid-template-columns: 1fr; }
   .challenge-banner { grid-template-columns: 1fr; }
   .species-grid { grid-template-columns: repeat(2, 1fr); }
 }

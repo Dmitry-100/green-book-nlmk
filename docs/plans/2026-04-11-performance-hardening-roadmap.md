@@ -977,3 +977,1084 @@
 - `pytest -q tests/test_notifications_edge_cases.py tests/test_export_behavior.py tests/test_map_behavior.py` (dockerized) — `10 passed`.
 - `pytest -q tests/test_notifications.py tests/test_notifications_edge_cases.py tests/test_map_validation.py tests/test_map_behavior.py tests/test_query_validation.py tests/test_export_behavior.py` (dockerized) — `27 passed`.
 - `ruff check tests/test_notifications_edge_cases.py tests/test_export_behavior.py tests/test_map_behavior.py` (dockerized) — green.
+
+## P40 — Catalog content QA and bioacoustics wave
+
+- [x] Нормализовать латинские названия для животных:
+  - птицы: 0/48 неполных названий;
+  - герпетофауна: 0/14;
+  - млекопитающие: 0/23.
+- [x] Расширить аудиоконтент карточек:
+  - 50 видов со звуками;
+  - новые точные записи для белоспинного дятла и сапсана после уточнения биномиальных названий.
+- [x] Добавить backend-аудит качества каталога:
+  - `latin_name_exact_species`;
+  - `latin_name_needs_review`;
+  - `latin_name_suspicious_chars`;
+  - разбивка по группам и примеры записей для экспертной доработки.
+- [x] Вывести показатель качества латинских названий в admin ops summary.
+
+Ожидаемый эффект:
+- каталог становится пригоднее для поиска внешних фото/звуков и экспертной проверки;
+- спорные родовые/семейные записи не маскируются под готовые видовые определения;
+- администратор видит контентный долг без SQL-доступа.
+
+Риски:
+- часть растений, грибов и насекомых нельзя безопасно уточнить без эксперта;
+- автоматическая проверка не заменяет таксономическую рецензию.
+
+Критерии готовности:
+- все животные, птицы и герпетофауна имеют биномиальные латинские названия;
+- admin summary показывает качество каталога;
+- тесты защищают новый контракт summary.
+
+### Проверки P40
+
+- `ruff check app/services/catalog_quality.py app/routers/admin.py tests/test_admin_ops_summary.py` (dockerized) — green.
+- `pytest tests/test_admin_ops_summary.py tests/test_species.py tests/test_species_content_review.py` (dockerized) — `18 passed`.
+- `npm run test:unit` — `7 passed`.
+- `npm run build` — ok.
+- live API `/api/admin/ops/summary`: `132/207` точных латинских названий, `75` требуют уточнения, `0` с подозрительными символами.
+
+## P41 — Catalog Latin script hygiene
+
+- [x] Убрать явные не-ASCII опечатки из латинских родовых названий без изменения таксономического уровня:
+  - `Еryngium` → `Eryngium`;
+  - `Diānthus` → `Dianthus`;
+  - `Pýrola` → `Pyrola`;
+  - `Aesсhna` → `Aeshna`;
+  - `Сheilosia` → `Cheilosia`.
+- [x] Сохранить честный статус родовых/семейных записей как `needs_review`, не превращая их в виды без экспертного подтверждения.
+- [x] Зафиксировать сценарий в content-review тесте.
+
+Ожидаемый эффект:
+- внешние поиски, аудио/фото-пайплайн и ручная экспертиза перестают спотыкаться о кириллицу внутри латинских имён;
+- QA-сигнал `latin_name_suspicious_chars` становится чистым и пригодным для мониторинга новых ошибок.
+
+Риски:
+- это исправляет только технические символы, а не завершает экспертную таксономию растений/грибов/насекомых.
+
+Критерии готовности:
+- `latin_name_suspicious_chars = 0` в live admin summary;
+- число `latin_name_needs_review` остаётся осмысленным и не скрывает родовые записи.
+
+### Проверки P41
+
+- `pytest tests/test_species_content_review.py tests/test_admin_ops_summary.py tests/test_species.py` (dockerized) — `18 passed`.
+- `ruff check app/seed/content_review_20260417.py tests/test_species_content_review.py app/services/catalog_quality.py tests/test_admin_ops_summary.py` (dockerized) — green.
+- DB audit: `0` записей с не-ASCII символами в `name_latin`, `75` записей ещё требуют экспертного уточнения.
+
+## P42 — Catalog quality workbench
+
+- [x] Добавить детальную admin-ручку качества каталога:
+  - `GET /api/admin/catalog/quality`;
+  - admin-only доступ;
+  - параметр `limit` для количества кандидатов на экспертную проверку;
+  - полный payload: totals, exact/needs-review/suspicious, разбивка по группам, список записей.
+- [x] Вывести рабочий блок качества в разделе администрирования видов:
+  - сводка `exact/total`;
+  - число записей на проверку и подозрительных символов;
+  - разбивка по группам;
+  - таблица кандидатов с быстрым переходом в карточку вида.
+- [x] Синхронизировать cache invalidation после добавления/удаления видов.
+
+Ожидаемый эффект:
+- контентная доработка каталога становится управляемой из UI, без SQL и ручного чтения ops summary;
+- следующие волны таксономической чистки можно вести по конкретному списку и группам;
+- администратор быстрее видит новые ошибки после правок справочника.
+
+Риски:
+- список остаётся диагностическим, а не редактором таксономии;
+- часть оставшихся записей требует экспертного источника, поэтому автоматические замены здесь намеренно не выполняются.
+
+Критерии готовности:
+- endpoint доступен только admin;
+- admin UI показывает полный список кандидатов в пределах `limit`;
+- live API возвращает `0` suspicious chars и актуальный backlog.
+
+### Проверки P42
+
+- `pytest tests/test_admin_ops_summary.py tests/test_species_content_review.py tests/test_species.py -q` (dockerized) — `20 passed`.
+- `ruff check app/routers/admin.py app/services/catalog_quality.py tests/test_admin_ops_summary.py` (dockerized) — green.
+- `npm run test:unit` — `7 passed`.
+- `npm run build` — ok; прежнее предупреждение Vite про `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+- live API `/api/admin/catalog/quality?limit=200`: `207` видов, `132` точных латинских названия, `75` требуют уточнения, `0` с подозрительными символами.
+
+## P43 — Species catalog CSV export for expert review
+
+- [x] Добавить admin-only экспорт каталога:
+  - `GET /api/admin/catalog/export`;
+  - CSV с BOM для удобного открытия в Excel;
+  - поля `id`, русское/латинское название, группа, категория, охранный статус, фото, аудио и quality-флаги.
+- [x] Добавить фильтр `needs_review=true`:
+  - экспортируются только записи без точного биномиального латинского названия;
+  - сохраняются признаки `latin_name_quality` и `latin_name_suspicious_chars`.
+- [x] Подключить кнопку CSV-выгрузки в admin quality-блоке.
+
+Ожидаемый эффект:
+- экспертную правку каталога можно вести в привычном табличном формате;
+- остается единый источник правды в системе, а выгрузка служит рабочим листом для согласования;
+- уменьшается риск ручных SQL-выборок и расхождений между UI и контентным backlog.
+
+Риски:
+- это пока экспорт, не массовый импорт обратно;
+- CSV не решает вопрос авторских прав на медиа, только помогает ревизии.
+
+Критерии готовности:
+- endpoint закрыт ролью admin;
+- CSV открывается как attachment и содержит ожидаемые колонки;
+- `needs_review=true` на live базе возвращает 75 строк.
+
+### Проверки P43
+
+- `pytest tests/test_admin_ops_summary.py tests/test_species_content_review.py tests/test_species.py -q` (dockerized) — `22 passed`.
+- `ruff check app/routers/admin.py app/services/catalog_quality.py tests/test_admin_ops_summary.py` (dockerized) — green.
+- `npm run test:unit` — `7 passed`.
+- `npm run build` — ok; прежнее предупреждение Vite про `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+- live API `/api/admin/catalog/export?needs_review=true`: attachment `species-catalog-needs-review.csv`, `75` строк.
+
+## P44 — CSV import preview for catalog review
+
+- [x] Добавить безопасный preview-импорт экспертного CSV:
+  - `POST /api/admin/catalog/import/preview`;
+  - admin-only доступ;
+  - проверка `.csv`, UTF-8/UTF-8 BOM и обязательной колонки `id`;
+  - dry-run без записи в БД.
+- [x] Вынести разбор CSV в отдельный сервис:
+  - нормализация строковых полей;
+  - проверка `group`, `category`, `is_poisonous`, `photo_urls`, `audio_url`;
+  - сравнение с текущей записью вида;
+  - отчет по изменениям, неизмененным строкам и ошибкам.
+- [x] Подключить UI-предпросмотр в admin quality-блоке:
+  - загрузка CSV;
+  - сводка по строкам;
+  - таблица будущих изменений;
+  - таблица ошибок.
+
+Ожидаемый эффект:
+- эксперт может править выгрузку в таблице, а администратор видит последствия до изменения базы;
+- снижается риск случайной порчи справочника при массовых правках;
+- появляется фундамент для следующего шага: подтвержденного массового применения правок.
+
+Риски:
+- пока нет apply-режима, только проверка;
+- CSV остается чувствительным к ручным изменениям колонок, поэтому ошибки показываются построчно.
+
+Критерии готовности:
+- preview endpoint не меняет БД;
+- ошибки строк не блокируют анализ остальных строк;
+- UI показывает changes/errors понятно для администратора.
+
+### Проверки P44
+
+- `pytest tests/test_admin_catalog_import.py tests/test_admin_ops_summary.py tests/test_species_content_review.py tests/test_species.py -q` (dockerized) — `25 passed`.
+- `ruff check app/services/catalog_import.py app/services/catalog_quality.py app/routers/admin.py tests/test_admin_catalog_import.py tests/test_admin_ops_summary.py` (dockerized) — green.
+- `npm run test:unit` — `7 passed`.
+- `npm run build` — ok; прежнее предупреждение Vite про `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+
+## P45 — Confirmed CSV catalog apply
+
+- [x] Добавить применение проверенного CSV:
+  - `POST /api/admin/catalog/import/apply`;
+  - повторное использование preview-валидации;
+  - отказ, если в CSV есть ошибки;
+  - обновление только реально измененных полей.
+- [x] Сохранить операционную трассируемость:
+  - audit event `admin.catalog_import_apply`;
+  - filename, total/changing/unchanged/applied counts в details;
+  - инвалидация кеша списка видов после массового обновления.
+- [x] Подключить UI-действие после чистого preview:
+  - кнопка `Применить CSV` появляется только при `error_rows = 0` и наличии изменений;
+  - перед применением есть подтверждение;
+  - после применения обновляются список видов и quality summary.
+
+Ожидаемый эффект:
+- экспертные правки можно провести полным циклом: выгрузка → правка → preview → подтвержденное применение;
+- массовое обновление перестает быть ручной SQL-операцией;
+- история изменений остается видимой в audit log.
+
+Риски:
+- пока нет versioning/rollback отдельной пачки, поэтому применять нужно после внимательного preview;
+- CSV apply обновляет справочник по `id`, поэтому файл должен быть из актуальной выгрузки.
+
+Критерии готовности:
+- apply endpoint не применяет CSV с ошибками;
+- успешный apply меняет только поля из preview;
+- UI не предлагает применить ошибочный файл.
+
+### Проверки P45
+
+- `pytest tests/test_admin_catalog_import.py tests/test_admin_ops_summary.py tests/test_species_content_review.py tests/test_species.py -q` (dockerized) — `27 passed`.
+- `ruff check app/services/catalog_import.py app/services/catalog_quality.py app/routers/admin.py tests/test_admin_catalog_import.py tests/test_admin_ops_summary.py` (dockerized) — green.
+- `npm run test:unit` — `7 passed`.
+- `npm run build` — ok; прежнее предупреждение Vite про `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+
+## P46 — CSV import batch history and rollback
+
+- [x] Добавить модель и миграцию batch-истории:
+  - `catalog_import_batches`;
+  - статус `applied / rolled_back`;
+  - actor/rollback actor;
+  - счетчики строк;
+  - JSON-снимок `before/after` по каждой измененной записи.
+- [x] Расширить apply-контур:
+  - `POST /api/admin/catalog/import/apply` теперь возвращает `batch_id`;
+  - создается batch-запись до commit;
+  - audit event содержит `batch_id`.
+- [x] Добавить admin API истории и отката:
+  - `GET /api/admin/catalog/import/batches`;
+  - `POST /api/admin/catalog/import/batches/{batch_id}/rollback`;
+  - rollback разрешен только для `applied`;
+  - rollback проверяет, что текущие значения все еще совпадают с `after`, чтобы не затереть более поздние ручные правки.
+- [x] Подключить UI:
+  - история последних CSV-импортов в admin quality-блоке;
+  - статус пачки;
+  - кнопка отката для примененных batch.
+
+Ожидаемый эффект:
+- массовые CSV-правки становятся обратимыми;
+- администратор видит историю контентных пачек без SQL;
+- снижается страх перед экспертными массовыми обновлениями справочника.
+
+Риски:
+- rollback откатывает только batch, если после него строки не менялись;
+- для сложных цепочек редактирования позже может понадобиться более полноценное content versioning.
+
+Критерии готовности:
+- apply создает batch и возвращает `batch_id`;
+- rollback восстанавливает `before`-значения и меняет статус batch;
+- повторный rollback отклоняется;
+- live DB мигрирована до head.
+
+### Проверки P46
+
+- `pytest tests/test_admin_catalog_import.py tests/test_admin_ops_summary.py tests/test_species_content_review.py tests/test_species.py -q` (dockerized) — `29 passed`.
+- `ruff check app/models/catalog_import.py app/services/catalog_import.py app/services/catalog_quality.py app/routers/admin.py tests/test_admin_catalog_import.py tests/test_admin_ops_summary.py migrations/versions/a1b2c3d4e5f6_add_catalog_import_batches.py` (dockerized) — green.
+- `npm run test:unit` — `7 passed`.
+- `npm run build` — ok; прежнее предупреждение Vite про `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+- `alembic upgrade head` (dockerized live DB) — applied `a1b2c3d4e5f6`.
+- live API `/api/admin/catalog/import/batches?limit=10`: `0` batch, endpoint доступен.
+
+## P47 — CSV import batch detail review
+
+- [x] Добавить detail endpoint для batch-истории:
+  - `GET /api/admin/catalog/import/batches/{batch_id}`;
+  - возвращает metadata batch и полный список `changes`.
+- [x] Покрыть контракт тестом:
+  - apply создает batch;
+  - detail возвращает `before/after` по измененным полям.
+- [x] Подключить UI-просмотр:
+  - кнопка `Детали` в истории CSV-импортов;
+  - таблица измененных видов;
+  - поля, старые и новые значения.
+
+Ожидаемый эффект:
+- администратор видит содержимое batch до отката;
+- rollback становится проверяемым действием, а не слепой кнопкой;
+- контентные пачки легче обсуждать с экспертом.
+
+Риски:
+- detail показывает технические имена полей; позже можно добавить человекочитаемые labels.
+
+Критерии готовности:
+- detail endpoint закрыт admin-role;
+- detail возвращает изменения batch;
+- UI показывает выбранный batch рядом с историей.
+
+### Проверки P47
+
+- `pytest tests/test_admin_catalog_import.py tests/test_admin_ops_summary.py tests/test_species_content_review.py tests/test_species.py -q` (dockerized) — `30 passed`.
+- `ruff check app/models/catalog_import.py app/services/catalog_import.py app/services/catalog_quality.py app/routers/admin.py tests/test_admin_catalog_import.py tests/test_admin_ops_summary.py migrations/versions/a1b2c3d4e5f6_add_catalog_import_batches.py` (dockerized) — green.
+- `npm run test:unit` — `7 passed`.
+- `npm run build` — ok; прежнее предупреждение Vite про `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+
+## P48 — Human-readable CSV import review labels
+
+- [x] Вынести форматирование CSV import preview/detail в frontend-helper:
+  - `formatCatalogImportFields`;
+  - `formatCatalogImportDelta`;
+  - человекочитаемые labels для полей справочника.
+- [x] Улучшить отображение значений:
+  - `null`, `undefined` и пустая строка показываются как `пусто`;
+  - boolean показывается как `да/нет`;
+  - массивы URL показываются через `;`.
+- [x] Подключить helper в admin quality-блоке:
+  - preview изменений;
+  - batch detail;
+  - rollback review.
+
+Ожидаемый эффект:
+- администратор и эксперт читают изменения без знания внутренних имен полей;
+- снижается риск ошибочного применения или отката CSV-пачки;
+- UX контентной ревизии становится ближе к редакционному инструменту.
+
+Риски:
+- labels живут на frontend; при добавлении новых CSV-полей нужно обновлять словарь.
+
+Критерии готовности:
+- formatter покрыт unit-тестами;
+- admin build проходит;
+- backend regression по CSV import не сломан.
+
+### Проверки P48
+
+- `npm run test:unit` — `10 passed`.
+- `npm run build` — ok; прежнее предупреждение Vite про `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+- `pytest tests/test_admin_catalog_import.py tests/test_admin_ops_summary.py -q` (dockerized) — `16 passed`.
+- `ruff check app/models/catalog_import.py app/services/catalog_import.py app/routers/admin.py tests/test_admin_catalog_import.py tests/test_admin_ops_summary.py` (dockerized) — green.
+
+## P49 — CSV import batch history filters and pagination
+
+- [x] Добавить backend-фильтр истории CSV batch:
+  - `GET /api/admin/catalog/import/batches?status=applied`;
+  - `GET /api/admin/catalog/import/batches?status=rolled_back`;
+  - сохранение существующих `skip/limit`.
+- [x] Зафиксировать контракт тестом:
+  - примененная batch;
+  - откатанная batch;
+  - фильтр по статусу;
+  - пагинация `skip=1&limit=1`.
+- [x] Подключить UI:
+  - select `Все / Примененные / Откатанные`;
+  - pagination по истории batch;
+  - сброс открытых деталей при смене фильтра или страницы.
+
+Ожидаемый эффект:
+- история CSV-импортов остается управляемой при росте числа batch;
+- администратор быстрее находит примененные или уже откатанные пачки;
+- UI не грузит длинную историю одним запросом.
+
+Риски:
+- фильтры пока минимальные; позже могут понадобиться поиск по файлу, дате и автору.
+
+Критерии готовности:
+- API корректно считает `total` после фильтра;
+- UI сохраняет корректную страницу и статус;
+- build и regression tests проходят.
+
+### Проверки P49
+
+- `pytest tests/test_admin_catalog_import.py tests/test_admin_ops_summary.py -q` (dockerized) — `17 passed`.
+- `ruff check app/models/catalog_import.py app/services/catalog_import.py app/routers/admin.py tests/test_admin_catalog_import.py tests/test_admin_ops_summary.py` (dockerized) — green.
+- `npm run test:unit` — `10 passed`.
+- `npm run build` — ok; прежнее предупреждение Vite про `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+
+## P50 — Portable species audio assets
+
+- [x] Перевести аудио карточек с внешних URL на переносимые локальные assets:
+  - `backend/media/species-audio/*`;
+  - seed пишет `/api/media/species-audio/<file>`;
+  - `SOURCES.md` фиксирует источник, автора и лицензию.
+- [x] Добавить публичную раздачу аудио через backend:
+  - `GET /api/media/species-audio/{filename}`;
+  - content-type для `ogg`, `oga`, `mp3`, `wav`;
+  - fallback MinIO/local disk сохраняет общий подход `/api/media`.
+- [x] Защитить переносимость тестами:
+  - все `AUDIO_UPDATES` используют локальный `/api/media/species-audio/`;
+  - каждый локальный файл существует в репозитории;
+  - route отдаёт audio response с диска.
+- [x] Актуализировать live DB:
+  - `50` видов со звуками;
+  - `0` внешних `audio_url`;
+  - `49` уникальных файлов, один файл используется для двух вариантов названия стрижа.
+
+Ожидаемый эффект:
+- запуск с другого компьютера после `git pull` получает тот же набор голосов видов без ручной загрузки внешних файлов;
+- карточки открываются стабильнее в демо/туннеле, потому что аудио не зависит от Wikimedia/Xeno-canto latency;
+- права и атрибуция не теряются при переносе.
+
+Риски:
+- аудио добавляет около `38 MB` к репозиторию;
+- часть файлов имеет лицензии Xeno-canto `NonCommercial`/`NoDerivs`, их нужно учитывать при публичном коммерческом использовании;
+- при будущей замене записей нужно синхронизировать `LOCAL_AUDIO_FILES`, `AUDIO_UPDATES` и `SOURCES.md`.
+
+Критерии готовности:
+- локальные аудиофайлы лежат в Git;
+- seed не пишет внешние `http` audio URL;
+- live DB и новый dev seed ведут себя одинаково.
+
+### Проверки P50
+
+- `pytest tests/test_species_content_review.py tests/test_media_access.py tests/test_species.py -q` (dockerized) — `18 passed`.
+- `ruff check app/routers/media_serve.py app/seed/content_review_20260417.py tests/test_species_content_review.py tests/test_media_access.py tests/test_species.py` (dockerized) — green.
+- `python -m app.seed.content_review_20260417` (dockerized live DB) — applied, `updated: 54`.
+- SQL check live DB: `local_audio=50`, `external_audio=0`, `total_audio=50`.
+- Runtime media check: `GET /api/media/species-audio/parus-major.ogg` — `200 audio/ogg`; `GET /api/media/species-audio/vulpes-vulpes.ogg` — `200 audio/ogg`.
+
+## P51 — Homepage community spotlight
+
+- [x] Расширить `/api/dashboard/summary` community-блоком:
+  - `active_observers`;
+  - `leaderboard_period`;
+  - top-3 `leaders` по сумме баллов.
+- [x] Покрыть backend-контракт тестом:
+  - summary возвращает лидеров в правильном порядке;
+  - `active_observers` считается по авторам наблюдений;
+  - существующие stats/fact/challenge не ломаются.
+- [x] Добавить на главную блок `Друиды компании`:
+  - краткий текст о сообществе;
+  - топ-3 участников;
+  - ссылка на полный рейтинг в профиле.
+
+Ожидаемый эффект:
+- главная становится живее и лучше поддерживает возвращаемость;
+- пользователи видят социальное подтверждение и понятную мотивацию добавлять наблюдения;
+- для демо появляется быстрый рассказ про вовлечение сотрудников.
+
+Риски:
+- пока рейтинг общий за всё время; позже может понадобиться переключатель месяц/квартал;
+- при пустой геймификации блок будет скрыт или покажет пустое состояние.
+
+Критерии готовности:
+- community payload возвращается вместе с dashboard summary;
+- frontend build проходит;
+- блок не требует отдельного запроса к leaderboard.
+
+### Проверки P51
+
+- `pytest tests/test_dashboard_summary.py tests/test_species_content_review.py tests/test_media_access.py tests/test_species.py -q` (dockerized) — `19 passed`.
+- `ruff check app/routers/dashboard.py app/routers/media_serve.py app/seed/content_review_20260417.py tests/test_dashboard_summary.py tests/test_species_content_review.py tests/test_media_access.py tests/test_species.py` (dockerized) — green.
+- `npm run test:unit` — `10 passed`.
+- `npm run build` — ok; прежнее предупреждение Vite про `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+
+## P52 — Species audio discoverability
+
+- [x] Прокинуть `audio_url` в `recent_species` внутри `/api/dashboard/summary`.
+- [x] Добавить визуальный маркер `Есть голос`:
+  - в карточках списка видов;
+  - в карточках новых видов на главной.
+- [x] Покрыть backend-контракт тестом:
+  - `recent_species` возвращает локальный `audio_url`;
+  - существующие dashboard stats/community/fact/challenge не ломаются.
+
+Ожидаемый эффект:
+- пользователю проще найти виды с голосами без захода в каждую карточку;
+- ценность аудио становится видимой уже на главной и в каталоге;
+- новый локальный аудио-пайплайн получает понятную точку входа в интерфейсе.
+
+Риски:
+- бейдж пока бинарный: не показывает источник, лицензию или тип звука;
+- при большом числе тегов на маленьких карточках может понадобиться компактный icon-only вариант.
+
+Критерии готовности:
+- `audio_url` присутствует в dashboard summary для новых видов;
+- список видов и главная показывают бейдж для видов со звуком;
+- frontend build и backend regression проходят.
+
+### Проверки P52
+
+- `pytest tests/test_dashboard_summary.py tests/test_species_content_review.py tests/test_media_access.py tests/test_species.py -q` (dockerized) — `19 passed`.
+- `ruff check app/routers/dashboard.py app/routers/media_serve.py app/seed/content_review_20260417.py tests/test_dashboard_summary.py tests/test_species_content_review.py tests/test_media_access.py tests/test_species.py` (dockerized) — green.
+- `npm run test:unit` — `10 passed`.
+- `npm run build` — ok; прежнее предупреждение Vite про `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+
+## P53 — Species audio catalog filter
+
+- [x] Добавить API-фильтр каталога:
+  - `GET /api/species?has_audio=true`;
+  - `has_audio=false` возвращает виды без аудио;
+  - cache key списка учитывает audio-фильтр.
+- [x] Подключить фильтр в UI справочника:
+  - checkbox `С голосом`;
+  - запрос каталога передаёт `has_audio=true`;
+  - frontend cache key не смешивает обычный список и список со звуками.
+- [x] Зафиксировать поведение backend-тестом:
+  - тест сначала падал на старом API, потому что query param игнорировался;
+  - после реализации возвращается только вид с локальным `audio_url`.
+
+Ожидаемый эффект:
+- аудиоконтент становится не только украшением карточек, но и навигационным сценарием;
+- на демо можно быстро показать все виды, у которых уже есть голоса;
+- пользователю проще изучать птиц, млекопитающих и других животных через звук.
+
+Риски:
+- фильтр пока простой бинарный; позже можно добавить отдельные фильтры по группе звуков, лицензии или качеству записи;
+- при дальнейшей пагинации UI надо будет сохранить `has_audio` в URL.
+
+Критерии готовности:
+- API возвращает только виды с заполненным `audio_url`;
+- каталог фильтруется без перезагрузки страницы;
+- regression tests и frontend build проходят.
+
+### Проверки P53
+
+- `pytest tests/test_species.py tests/test_dashboard_summary.py tests/test_species_content_review.py tests/test_media_access.py -q` (dockerized) — `20 passed`.
+- `ruff check app/routers/species.py app/routers/dashboard.py app/routers/media_serve.py app/seed/content_review_20260417.py tests/test_species.py tests/test_dashboard_summary.py tests/test_species_content_review.py tests/test_media_access.py` (dockerized) — green.
+- `npm run test:unit` — `10 passed`.
+- `npm run build` — ok; прежнее предупреждение Vite про `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+- Runtime check: `GET /api/species?has_audio=true&limit=3` — `total=50`, первые элементы имеют локальные `/api/media/species-audio/*` URL.
+
+## P54 — Field-guide sections on species detail
+
+- [x] Добавить frontend-helper `buildSpeciesEditorialSections`:
+  - собирает блоки из `biotopes`, `season_info`, `do_dont_rules`;
+  - чистит пробелы;
+  - скрывает пустые значения.
+- [x] Покрыть helper unit-тестом по TDD:
+  - сначала тест падал на отсутствующем helper;
+  - после реализации проверяет порядок и фильтрацию пустых секций.
+- [x] Подключить редакционные блоки в карточку вида:
+  - `Где искать`;
+  - `Когда наблюдать`;
+  - `Как действовать`.
+
+Ожидаемый эффект:
+- карточка вида становится ближе к полевой памятке, а не только справочной анкете;
+- уже имеющиеся данные `biotopes`, `season_info`, `do_dont_rules` становятся видимыми пользователю;
+- следующие редакционные улучшения можно добавлять через один helper, не раздувая Vue-шаблон условиями.
+
+Риски:
+- качество текста зависит от заполненности текущих полей каталога;
+- часть видов покажет только один-два блока, пока экспертная ревизия не завершена.
+
+Критерии готовности:
+- пустые поля не создают пустых UI-блоков;
+- карточка вида показывает доступные полевые подсказки;
+- frontend unit tests и build проходят.
+
+### Проверки P54
+
+- `vitest run src/utils/speciesEditorialSections.test.ts` — `2 passed`.
+- `npm run build` — ok; прежнее предупреждение Vite про `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+
+## P55 — Editorial fields in expert CSV workflow
+
+- [x] Расширить CSV export/import справочника редакционными полями:
+  - `season_info`;
+  - `biotopes`;
+  - `description`;
+  - `do_dont_rules`.
+- [x] Сохранить безопасный контур preview/apply/rollback:
+  - preview показывает изменения по новым полям;
+  - apply обновляет только измененные значения;
+  - batch history хранит `before/after` для отката.
+- [x] Обновить человекочитаемые labels в admin UI:
+  - `Сезонность`;
+  - `Местообитания`;
+  - `Описание`;
+  - `Памятка`.
+
+Ожидаемый эффект:
+- экспертная доработка карточек теперь покрывает не только таксономию и медиа, но и полезные полевые подсказки;
+- можно массово наполнить блоки P54 через CSV без ручного SQL;
+- экспорт становится рабочим листом для редакционной рецензии.
+
+Риски:
+- длинные описания в CSV неудобны для Excel, но безопаснее текущего ручного редактирования;
+- текстовые поля требуют экспертной вычитки, автоматическая валидация проверяет только длину и пустые значения.
+
+Критерии готовности:
+- export содержит новые колонки;
+- import preview видит изменения в редакционных полях;
+- frontend labels показывают понятные названия;
+- regression tests и build проходят.
+
+### Проверки P55
+
+- `pytest tests/test_admin_catalog_import.py tests/test_admin_ops_summary.py -q` (dockerized) — `18 passed`.
+- `ruff check app/services/catalog_import.py app/routers/admin.py tests/test_admin_catalog_import.py tests/test_admin_ops_summary.py` (dockerized) — green.
+- `npm run test:unit` — `12 passed`.
+- `npm run build` — ok; прежнее предупреждение Vite про `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+
+## P56 — Manual species editing in admin UI
+
+- [x] Добавить frontend-helper для формы редактирования:
+  - сбор формы из строки вида;
+  - нормализация пустых текстов в `null`;
+  - разбор списка фото из textarea по строкам или `;`.
+- [x] Подключить ручное редактирование в admin UI:
+  - кнопка `Править` в таблице видов;
+  - диалог с базовыми, редакционными, фото- и аудио-полями;
+  - сохранение через `PUT /api/species/{id}`;
+  - инвалидация кешей каталога, admin quality, ops и audit.
+- [x] Зафиксировать backend regression:
+  - `PUT` принимает редакционные поля;
+  - audit event `species.update` содержит список изменённых полей.
+
+Ожидаемый эффект:
+- мелкие правки карточек можно делать сразу в админке, без CSV-цикла;
+- редакционная доработка становится быстрее при точечных исправлениях;
+- CSV остаётся инструментом массовых правок, а UI закрывает ежедневную работу.
+
+Риски:
+- форма пока без rich-text и без отдельного предпросмотра карточки;
+- длинные описания удобнее готовить вне админки и вставлять готовым текстом.
+
+Критерии готовности:
+- админ может открыть вид, изменить поля и сохранить;
+- список и quality summary обновляются после сохранения;
+- frontend helper и backend PUT покрыты тестами;
+- build проходит.
+
+### Проверки P56
+
+- `vitest run src/utils/speciesAdminForm.test.ts` — `3 passed`.
+- `pytest tests/test_species.py::test_update_species_accepts_editorial_fields -q` (dockerized) — `1 passed`.
+- `ruff check tests/test_species.py` (dockerized) — green.
+- `pytest tests/test_species.py tests/test_admin_catalog_import.py tests/test_admin_ops_summary.py -q` (dockerized) — `33 passed`.
+- `ruff check app/routers/species.py app/routers/admin.py app/services/catalog_import.py tests/test_species.py tests/test_admin_catalog_import.py tests/test_admin_ops_summary.py` (dockerized) — green.
+- `npm run test:unit` — `15 passed`.
+- `npm run build` — ok; прежнее предупреждение Vite про `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+
+## P57 — Full species creation form in admin UI
+
+- [x] Расширить форму добавления вида до полноценной карточки:
+  - базовые поля;
+  - охранный статус;
+  - сезонность;
+  - местообитания;
+  - описание;
+  - памятка;
+  - фото;
+  - аудио metadata.
+- [x] Переиспользовать общий frontend-helper формы:
+  - `buildEmptySpeciesForm`;
+  - `buildSpeciesUpdatePayload`;
+  - одинаковая нормализация create/edit payload.
+- [x] Зафиксировать backend regression:
+  - `POST /api/species` принимает полную карточку;
+  - ответ возвращает редакционные, фото- и аудио-поля.
+
+Ожидаемый эффект:
+- новый вид можно завести сразу как готовую карточку, без отдельного CSV или последующего редактирования;
+- add/edit формы ведут себя одинаково;
+- снижается риск неполных записей при ручном пополнении каталога.
+
+Риски:
+- форма стала длиннее; позже стоит разбить её на вкладки `Основное / Контент / Медиа`;
+- проверки URL остаются backend-валидацией, frontend пока только нормализует ввод.
+
+Критерии готовности:
+- форма добавления содержит те же рабочие поля, что и форма редактирования;
+- после успешного создания форма сбрасывается;
+- backend и frontend regression проходят.
+
+### Проверки P57
+
+- `vitest run src/utils/speciesAdminForm.test.ts` — `4 passed`.
+- `pytest tests/test_species.py::test_create_species_accepts_full_editorial_card -q` (dockerized) — `1 passed`.
+- `pytest tests/test_species.py tests/test_admin_catalog_import.py tests/test_admin_ops_summary.py -q` (dockerized) — `34 passed`.
+- `ruff check app/routers/species.py app/routers/admin.py app/services/catalog_import.py tests/test_species.py tests/test_admin_catalog_import.py tests/test_admin_ops_summary.py` (dockerized) — green.
+- `npm run test:unit` — `16 passed`.
+- `npm run build` — ok; прежнее предупреждение Vite про `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+
+## P58 — Species admin form tabs
+
+- [x] Разбить длинные add/edit диалоги вида на вкладки:
+  - `Основное`;
+  - `Контент`;
+  - `Медиа`.
+- [x] Вынести конфигурацию вкладок в общий frontend-helper:
+  - add/edit используют один набор вкладок;
+  - тест фиксирует порядок и подписи.
+- [x] Улучшить состояние формы:
+  - при открытии add/edit активируется вкладка `Основное`;
+  - при успешном создании форма сбрасывается вместе с активной вкладкой.
+
+Ожидаемый эффект:
+- админка становится менее перегруженной визуально;
+- ручное создание и редактирование видов проще объяснить пользователю;
+- будущие поля можно добавлять в понятные группы, не удлиняя один общий список.
+
+Риски:
+- форма стала зависеть от Element Plus tabs, но сборка уже подтверждает автоподключение компонента;
+- пока нет отдельного предпросмотра карточки перед сохранением.
+
+Критерии готовности:
+- обе формы используют одинаковые вкладки;
+- вкладка сбрасывается при открытии формы;
+- unit tests и frontend build проходят.
+
+### Проверки P58
+
+- `vitest run src/utils/speciesAdminForm.test.ts` — `5 passed`.
+- `npm run test:unit` — `17 passed`.
+- `npm run build` — ok; прежнее предупреждение Vite про `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+
+## P59 — Species admin card preview
+
+- [x] Добавить frontend-helper предпросмотра:
+  - нормализует текущие значения формы;
+  - выбирает первое фото из textarea;
+  - показывает наличие аудио и название записи.
+- [x] Подключить preview в add/edit диалогах:
+  - фото или иконка группы;
+  - русское и латинское название;
+  - группа, категория, статус, аудио, ядовитость;
+  - описание и полевые подсказки.
+- [x] Покрыть helper unit-тестом:
+  - проверка trimming;
+  - проверка первого фото;
+  - проверка audio badge data.
+
+Ожидаемый эффект:
+- администратор видит будущую карточку до сохранения;
+- снижается риск некрасивых длинных строк, пустых названий и ошибочных media URL;
+- add/edit формы становятся ближе к редакторскому интерфейсу, а не к сырой БД-форме.
+
+Риски:
+- предпросмотр компактный и не является pixel-perfect копией публичной карточки;
+- аудио пока отображается как метка, без встроенного плеера в preview.
+
+Критерии готовности:
+- preview обновляется по текущим значениям формы;
+- add/edit показывают один и тот же формат preview;
+- unit tests и frontend build проходят.
+
+### Проверки P59
+
+- `vitest run src/utils/speciesAdminForm.test.ts` — `6 passed`.
+- `npm run test:unit` — `18 passed`.
+- `npm run build` — ok; прежнее предупреждение Vite про `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+
+## P60 — Admin species list filters
+
+- [x] Добавить helper для query-параметров admin-списка:
+  - `search`;
+  - `group`;
+  - `category`;
+  - `has_audio`;
+  - стабильный cache key.
+- [x] Подключить фильтры над таблицей видов:
+  - поиск по русскому/латинскому названию;
+  - группа;
+  - категория;
+  - `С голосом`;
+  - сброс фильтров.
+- [x] Показать счётчик:
+  - найдено всего;
+  - если результатов больше лимита, сколько показано.
+
+Ожидаемый эффект:
+- администратор быстро находит нужный вид для ручной правки;
+- таблица перестаёт быть “первые 200 записей” без навигации;
+- аудиоконтент можно быстро проверить и редактировать из админки.
+
+Риски:
+- пока нет полноценной пагинации списка видов в admin UI; при `total > 200` показывается ограничение;
+- поиск с одним символом намеренно не отправляется, потому что backend требует минимум 2 символа.
+
+Критерии готовности:
+- UI-фильтры используют существующий `/api/species`;
+- cache key учитывает все фильтры;
+- unit tests и frontend build проходят.
+
+### Проверки P60
+
+- `vitest run src/utils/speciesAdminForm.test.ts` — `8 passed`.
+- `npm run test:unit` — `20 passed`.
+- `npm run build` — ok; прежнее предупреждение Vite про `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+
+## P61 — Admin species list pagination
+
+- [x] Добавить pagination-параметры в helper admin-списка видов:
+  - `page`;
+  - `pageSize`;
+  - вычисление `skip`;
+  - cache key учитывает страницу и размер страницы.
+- [x] Подключить пагинацию в admin UI:
+  - список видов грузится страницами по `50` записей;
+  - фильтры и поиск сбрасывают страницу на первую;
+  - переключение страниц переиспользует cache/dedupe слой `/api/species`.
+- [x] Убрать ограничение “показаны первые 200” из рабочего сценария:
+  - счетчик показывает общее число найденных записей;
+  - при нескольких страницах отображается текущая страница.
+
+Ожидаемый эффект:
+- администратор может дойти до любой записи каталога без изменения фильтров;
+- таблица не грузит весь справочник одним запросом при росте каталога;
+- фильтры, поиск и аудио-проверка остаются совместимыми с server-side pagination.
+
+Риски:
+- пока страница не отражается в URL, поэтому при reload админка возвращается на первую страницу;
+- при удалении последней записи на странице может потребоваться ручной переход назад, если каталог сильно сократился.
+
+Критерии готовности:
+- helper строит корректные `skip/limit`;
+- UI сбрасывает страницу при изменении фильтров;
+- unit tests и frontend build проходят.
+
+### Проверки P61
+
+- `vitest run src/utils/speciesAdminForm.test.ts` — `9 passed`.
+- `npm run test:unit` — `25 passed`.
+- `npm run build` — ok; прежнее предупреждение Vite про `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+
+## P62 — Admin species URL state
+
+- [x] Добавить helper-контракт для URL-состояния admin-списка:
+  - сбор чистого query из `search/group/category/has_audio/page`;
+  - сохранение чужих query-параметров;
+  - очистка пустых и невалидных значений.
+- [x] Добавить восстановление состояния из URL:
+  - `species_search`;
+  - `species_group`;
+  - `species_category`;
+  - `species_has_audio`;
+  - `species_page`.
+- [x] Подключить sync в admin UI:
+  - фильтры и поиск пишут состояние в URL;
+  - смена страницы пишет `species_page`;
+  - refresh или открытие ссылки восстанавливает фильтры и страницу;
+  - browser back/forward применяет URL-состояние к таблице.
+
+Ожидаемый эффект:
+- администратор может отправить ссылку на конкретный отфильтрованный список;
+- refresh больше не сбрасывает рабочую позицию в каталоге;
+- контентная ревизия становится удобнее при длинных списках видов.
+
+Риски:
+- URL хранит только состояние списка видов, а не открытый edit-dialog;
+- query-параметры админки могут со временем потребовать namespace-дисциплины для других вкладок.
+
+Критерии готовности:
+- URL helper покрыт unit-тестами;
+- AdminView восстанавливает состояние до первого запроса списка;
+- frontend unit tests и build проходят.
+
+### Проверки P62
+
+- `vitest run src/utils/speciesAdminForm.test.ts` — `12 passed`.
+- `npm run test:unit` — `28 passed`.
+- `npm run build` — ok; прежнее предупреждение Vite про `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+
+## P63 — Admin species page self-healing
+
+- [x] Добавить helper для нормализации текущей страницы после изменения `total`:
+  - текущая страница не может быть меньше `1`;
+  - текущая страница не может быть больше последней доступной;
+  - пустой результат возвращает страницу `1`.
+- [x] Подключить self-healing в загрузку admin-списка:
+  - если после удаления/фильтрации текущая страница стала недоступной, UI обновляет URL;
+  - затем выполняет один повторный запрос на последнюю существующую страницу.
+- [x] Сохранить совместимость с URL-state P62:
+  - слишком большая `species_page` в ссылке больше не оставляет таблицу пустой;
+  - после коррекции URL показывает фактическую страницу.
+
+Ожидаемый эффект:
+- администратор не попадает в пустую таблицу после удаления последнего вида на странице;
+- ссылки с устаревшим номером страницы мягко корректируются;
+- постраничная работа с каталогом становится устойчивее к изменениям данных.
+
+Риски:
+- correction делает один дополнительный запрос в редком случае недоступной страницы;
+- если несколько администраторов одновременно массово меняют каталог, страница может корректироваться чаще.
+
+Критерии готовности:
+- helper покрыт unit-тестом;
+- AdminView корректирует страницу и URL до повторной загрузки;
+- frontend unit tests и build проходят.
+
+### Проверки P63
+
+- `vitest run src/utils/speciesAdminForm.test.ts` — `13 passed`.
+- `npm run test:unit` — `29 passed`.
+- `npm run build` — ok; прежнее предупреждение Vite про `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+
+## P64 — Admin species quality badges
+
+- [x] Добавить frontend-helper быстрых quality-сигналов для строки вида:
+  - `нет фото`;
+  - `нет описания`;
+  - `нет аудио`.
+- [x] Покрыть helper unit-тестами:
+  - неполная карточка возвращает три бейджа;
+  - заполненная карточка не показывает предупреждений.
+- [x] Вывести бейджи в admin species table:
+  - отдельная колонка `Пробелы`;
+  - warning/info tags для недостающих материалов;
+  - короткое состояние `заполнено`, когда быстрых пробелов нет.
+
+Ожидаемый эффект:
+- администратор видит контентные пробелы без открытия каждой карточки;
+- ускоряется ручная доводка каталога после импорта/экспертной ревизии;
+- аудио/фото/описания становятся операционными критериями качества, а не скрытыми полями.
+
+Риски:
+- бейджи проверяют только быстрые бинарные признаки, не качество текста или лицензии медиа;
+- при дальнейшем расширении критериев нужно не перегрузить таблицу.
+
+Критерии готовности:
+- quality helper покрыт unit-тестами;
+- таблица видов показывает бейджи для текущей страницы;
+- frontend unit tests и build проходят.
+
+### Проверки P64
+
+- `vitest run src/utils/speciesAdminForm.test.ts` — `15 passed`.
+- `npm run test:unit` — `31 passed`.
+- `npm run build` — ok; прежнее предупреждение Vite про `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+
+## P65 — Admin species quality-gap filters
+
+- [x] Добавить backend-фильтр `quality_gap` в `/api/species`:
+  - `missing_photo`;
+  - `missing_description`;
+  - `missing_audio`.
+- [x] Учесть фильтр в species list cache key:
+  - локальный TTL cache;
+  - Redis-backed cache.
+- [x] Покрыть backend-контракт тестами:
+  - каждый тип пробела возвращает только подходящие виды;
+  - неизвестное значение отклоняется FastAPI/Pydantic-валидацией.
+- [x] Расширить admin species URL/helper state:
+  - query-параметр `species_quality_gap`;
+  - восстановление состояния после refresh/back/forward;
+  - очистка невалидных значений.
+- [x] Подключить UI-фильтр `Пробел` в admin species table:
+  - `Без фото`;
+  - `Без описания`;
+  - `Без аудио`;
+  - конфликт `Без аудио` + `С голосом` автоматически нормализуется.
+
+Ожидаемый эффект:
+- администратор получает рабочие очереди на доведение контента без ручного просмотра всех страниц;
+- можно быстро отфильтровать виды без фото, описаний или голосов и закрывать пробелы партиями;
+- URL-ссылки на конкретные очереди качества можно передавать между участниками ревизии.
+
+Риски:
+- `missing_description` проверяет только пустоту текста, а не полноту/качество описания;
+- `missing_photo` считает массив фото как бинарный признак и не валидирует доступность URL;
+- при добавлении новых quality-критериев нужно следить, чтобы панель фильтров не стала перегруженной.
+
+Критерии готовности:
+- `/api/species` принимает `quality_gap` и корректно валидирует значения;
+- cache key различает одинаковые списки с разными quality-gap фильтрами;
+- admin UI сохраняет фильтр в URL и не допускает противоречивые audio-фильтры;
+- backend/frontend проверки и frontend build проходят.
+
+### Проверки P65
+
+- `docker compose exec -T backend pytest tests/test_species.py -q` — `18 passed`.
+- `docker compose exec -T backend ruff check app/routers/species.py tests/test_species.py` — green.
+- `vitest run src/utils/speciesAdminForm.test.ts` — `16 passed`.
+- `npm run test:unit` — `32 passed`.
+- `npm run build` — ok; прежнее предупреждение Vite про `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+
+## P66 — Admin content-gap counters
+
+- [x] Расширить catalog quality snapshot счетчиками контентных пробелов:
+  - `missing_photo`;
+  - `missing_description`;
+  - `missing_audio`.
+- [x] Переиспользовать эти счетчики в:
+  - `GET /api/admin/catalog/quality`;
+  - `GET /api/admin/ops/summary`.
+- [x] Добавить frontend-helper для стабильного списка quality-gap счетчиков.
+- [x] Вывести кликабельные очереди качества в admin-блоке каталога:
+  - счетчик `без фото`;
+  - счетчик `без описания`;
+  - счетчик `без аудио`;
+  - клик включает соответствующий фильтр `Пробел` в таблице видов;
+  - повторный клик снимает активный фильтр.
+
+Ожидаемый эффект:
+- администратор сразу видит объем контентного долга по фото, описаниям и аудио;
+- переход от сводки к рабочей очереди занимает один клик;
+- quality-gap фильтры P65 получают понятный entry point в интерфейсе.
+
+Риски:
+- счетчики остаются бинарными и не проверяют качество текста, лицензию или доступность URL;
+- при очень большом каталоге snapshot пока считает показатели синхронно вместе с quality-блоком.
+
+Критерии готовности:
+- backend snapshot возвращает `content_gap_counts` во всех catalog quality payload;
+- UI-счетчики синхронизируются с фильтром таблицы видов;
+- backend/frontend проверки и frontend build проходят.
+
+### Проверки P66
+
+- `docker compose exec -T backend pytest tests/test_admin_ops_summary.py::test_admin_catalog_quality_returns_review_candidates tests/test_admin_ops_summary.py::test_admin_ops_summary_returns_expected_sections -q` — `2 passed`.
+- `docker compose exec -T backend pytest tests/test_admin_ops_summary.py tests/test_species.py -q` — `26 passed`.
+- `docker compose exec -T backend ruff check app/services/catalog_quality.py tests/test_admin_ops_summary.py` — green.
+- `vitest run src/utils/speciesAdminForm.test.ts` — `17 passed`.
+- `npm run test:unit` — `33 passed`.
+- `npm run build` — ok; прежнее предупреждение Vite про `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+
+## P67 — Quality-gap CSV exports
+
+- [x] Расширить `GET /api/admin/catalog/export` параметром `quality_gap`:
+  - `missing_photo`;
+  - `missing_description`;
+  - `missing_audio`;
+  - неизвестные значения отклоняются FastAPI/Pydantic-валидацией.
+- [x] Сохранить совместимость с текущим `needs_review` export:
+  - без `quality_gap` поведение прежнее;
+  - при совместном использовании фильтры применяются как пересечение.
+- [x] Добавить стабильные имена файлов:
+  - `species-catalog-missing-photo.csv`;
+  - `species-catalog-missing-description.csv`;
+  - `species-catalog-missing-audio.csv`;
+  - при пересечении с `needs_review` имя дополняется `needs-review`.
+- [x] Подключить кнопку `CSV очереди` в admin quality-блоке:
+  - активна только при выбранном фильтре `Пробел`;
+  - выгружает текущую quality-gap очередь для ручной доработки.
+
+Ожидаемый эффект:
+- очереди “без фото/описания/аудио” можно отдавать на заполнение отдельными CSV-файлами;
+- контентная ревизия становится переносимой между машинами и участниками команды;
+- администратор получает быстрый путь от счетчика пробелов к файлу для массовой работы.
+
+Риски:
+- CSV не проверяет доступность внешних ссылок и качество текста, только выгружает текущий срез;
+- если пользователь поменял фильтр таблицы, но не выбрал `Пробел`, кнопка очереди остается недоступной.
+
+Критерии готовности:
+- backend export фильтрует строки по выбранному content gap;
+- invalid `quality_gap` возвращает `422`;
+- admin UI формирует корректный запрос и имя файла для активной очереди;
+- backend/frontend проверки и frontend build проходят.
+
+### Проверки P67
+
+- `docker compose exec -T backend pytest tests/test_admin_ops_summary.py::test_admin_catalog_export_returns_quality_gap_csv tests/test_admin_ops_summary.py::test_admin_catalog_export_rejects_unknown_quality_gap -q` — `2 passed`.
+- `docker compose exec -T backend ruff check app/routers/admin.py tests/test_admin_ops_summary.py` — green.
+- `vitest run src/utils/speciesAdminForm.test.ts` — `18 passed`.
+- `docker compose exec -T backend pytest tests/test_admin_ops_summary.py tests/test_species.py -q` — `28 passed`.
+- `docker compose exec -T backend ruff check app/routers/admin.py app/routers/species.py app/services/catalog_quality.py tests/test_admin_ops_summary.py tests/test_species.py` — green.
+- `npm run test:unit` — `34 passed`.
+- `npm run build` — ok; прежнее предупреждение Vite про `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+
+## P68 — Short-description quality queue
+
+- [x] Добавить новый quality-gap `short_description`:
+  - описание есть;
+  - после trim короче `120` символов;
+  - пустые описания остаются в отдельной очереди `missing_description`.
+- [x] Расширить `/api/species`:
+  - server-side filter `quality_gap=short_description`;
+  - cache key продолжает учитывать выбранный quality-gap.
+- [x] Расширить catalog quality snapshot:
+  - `content_gap_counts.short_description`;
+  - показатель доступен в `/api/admin/catalog/quality` и `/api/admin/ops/summary`.
+- [x] Расширить CSV export очередей:
+  - `quality_gap=short_description`;
+  - файл `species-catalog-short-description.csv`.
+- [x] Подключить новый сигнал в admin UI:
+  - option `Короткое описание` в фильтре `Пробел`;
+  - счетчик в quality-блоке;
+  - бейдж `короткое описание` в таблице видов.
+
+Ожидаемый эффект:
+- редактор видит не только пустые карточки, но и “тонкие” описания, которые формально заполнены;
+- можно отдельно выгружать очередь на текстовую доработку;
+- качество карточек растет без ручного просмотра всех видов.
+
+Риски:
+- порог `120` символов эвристический и может потребовать настройки после редакторской пробы;
+- короткое описание не всегда плохое для очевидных видов, поэтому это warning, а не blocker.
+
+Критерии готовности:
+- backend фильтрует short-description очередь отдельно от missing-description;
+- quality counters и CSV export поддерживают новый gap;
+- admin UI показывает новый фильтр, счетчик и бейдж;
+- backend/frontend проверки и frontend build проходят.
+
+### Проверки P68
+
+- `docker compose exec -T backend pytest tests/test_species.py::test_list_species_with_quality_gap_filters tests/test_admin_ops_summary.py::test_admin_catalog_quality_returns_review_candidates tests/test_admin_ops_summary.py::test_admin_catalog_export_returns_quality_gap_csv tests/test_admin_ops_summary.py::test_admin_ops_summary_returns_expected_sections -q` — `4 passed`.
+- `docker compose exec -T backend ruff check app/routers/admin.py app/routers/species.py app/services/catalog_quality.py tests/test_admin_ops_summary.py tests/test_species.py` — green.
+- `vitest run src/utils/speciesAdminForm.test.ts` — `19 passed`.
+- `docker compose exec -T backend pytest tests/test_admin_ops_summary.py tests/test_species.py -q` — `28 passed`.
+- `npm run test:unit` — `35 passed`.
+- `npm run build` — ok; прежнее предупреждение Vite про `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.

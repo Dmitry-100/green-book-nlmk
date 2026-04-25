@@ -18,7 +18,7 @@
           </svg>
           <span v-if="unreadCount > 0" class="badge">{{ unreadCount }}</span>
         </div>
-        <div class="user-avatar" @click="$router.push('/profile')" style="cursor:pointer" title="Мой профиль">ДС</div>
+        <div class="user-avatar" @click="$router.push('/profile')" style="cursor:pointer" title="Мой профиль">{{ userInitials }}</div>
       </div>
     </nav>
 
@@ -31,6 +31,7 @@
       <router-link to="/quiz" active-class="active">Викторина</router-link>
       <router-link to="/passport" active-class="active">Экопаспорт</router-link>
       <router-link to="/routes" active-class="active">Маршруты</router-link>
+      <router-link to="/exhibition" active-class="active">Выставка</router-link>
       <router-link to="/help" active-class="active">Правила</router-link>
       <router-link v-if="auth.isEcologist()" to="/expert" active-class="active">Эколог</router-link>
       <router-link v-if="auth.isAdmin()" to="/admin" active-class="active">Админ</router-link>
@@ -43,12 +44,14 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import api from '../api/client'
+import { buildUserInitials, normalizeDemoDisplayName } from '../utils/userInitials'
 
 const auth = useAuthStore()
 const unreadCount = ref(0)
+const userInitials = computed(() => buildUserInitials(normalizeDemoDisplayName(auth.user?.displayName), 'ДМ'))
 let pollTimer: number | null = null
 let unreadRequest: Promise<void> | null = null
 let lastUnreadFetchAt = 0

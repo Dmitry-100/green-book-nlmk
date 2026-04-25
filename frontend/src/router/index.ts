@@ -88,6 +88,11 @@ const router = createRouter({
           name: 'routes',
           component: () => import('../views/RoutesView.vue'),
         },
+        {
+          path: 'exhibition',
+          name: 'exhibition',
+          component: () => import('../views/ExhibitionView.vue'),
+        },
       ],
     },
   ],

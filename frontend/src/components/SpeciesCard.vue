@@ -13,6 +13,7 @@
         <span v-if="species.category === 'red_book'" class="tag tag--redbook">Красная книга</span>
         <span v-else-if="species.category === 'rare'" class="tag tag--rare">Редкий</span>
         <span v-else class="tag tag--typical">{{ categoryLabel }}</span>
+        <span v-if="species.audio_url" class="tag tag--audio">Есть голос</span>
       </div>
     </div>
   </div>
@@ -62,4 +63,5 @@ const statusLabel = computed(() => {
 .tag--redbook { background: rgba(229,57,53,0.1); color: #E53935; }
 .tag--rare { background: rgba(255,193,7,0.15); color: #F57F17; }
 .tag--typical { background: rgba(139,195,74,0.15); color: #558B2F; }
+.tag--audio { background: rgba(72,111,125,0.14); color: #1B4D4F; }
 </style>

@@ -28,6 +28,7 @@ import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import { useAuthStore } from '../stores/auth'
+import { DEMO_USER_DISPLAY_NAME } from '../utils/userInitials'
 
 const router = useRouter()
 const route = useRoute()
@@ -46,7 +47,7 @@ async function login() {
   try {
     const { data } = await axios.post('/api/dev/token', null, {
       params: {
-        name: `Dev ${selectedRole.value}`,
+        name: DEMO_USER_DISPLAY_NAME,
         email: `${selectedRole.value}@nlmk.com`,
         role: selectedRole.value,
       }

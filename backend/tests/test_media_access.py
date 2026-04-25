@@ -61,6 +61,24 @@ def _mock_media_response(*_args, **_kwargs):
     return PlainTextResponse("ok", media_type="text/plain")
 
 
+def _raise_media_client():
+    raise RuntimeError("MinIO unavailable in route test")
+
+
+def test_species_audio_media_is_public_from_disk(client, tmp_path, monkeypatch):
+    monkeypatch.setattr(media_serve_router, "MEDIA_DIR", tmp_path)
+    monkeypatch.setattr(media_serve_router, "get_s3_client", _raise_media_client)
+    audio_dir = tmp_path / "species-audio"
+    audio_dir.mkdir()
+    (audio_dir / "test-call.ogg").write_bytes(b"OggS")
+
+    response = client.get("/api/media/species-audio/test-call.ogg")
+
+    assert response.status_code == 200
+    assert response.content == b"OggS"
+    assert response.headers["content-type"].startswith("audio/ogg")
+
+
 def test_private_observation_media_is_hidden_for_public(client, db, monkeypatch):
     monkeypatch.setattr(media_serve_router, "_serve_from_minio_or_disk", _mock_media_response)
 

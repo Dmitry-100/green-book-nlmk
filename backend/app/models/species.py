@@ -41,6 +41,10 @@ class Species(Base):
     do_dont_rules: Mapped[str | None] = mapped_column(Text)
     qr_url: Mapped[str | None] = mapped_column(String(500))
     photo_urls: Mapped[list[str] | None] = mapped_column(ARRAY(String))
+    audio_url: Mapped[str | None] = mapped_column(String(500))
+    audio_title: Mapped[str | None] = mapped_column(String(255))
+    audio_source: Mapped[str | None] = mapped_column(String(255))
+    audio_license: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()

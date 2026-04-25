@@ -21,6 +21,33 @@
           <div class="meta-item" v-if="species.conservation_status"><div class="meta-item__label">Охранный статус</div><div class="meta-item__value">{{ species.conservation_status }}</div></div>
         </div>
         <p v-if="species.description" class="detail-description">{{ species.description }}</p>
+        <div v-if="editorialSections.length" class="field-guide">
+          <div
+            v-for="section in editorialSections"
+            :key="section.key"
+            class="field-guide__item"
+          >
+            <div class="field-guide__eyebrow">{{ section.eyebrow }}</div>
+            <h2>{{ section.title }}</h2>
+            <p>{{ section.body }}</p>
+          </div>
+        </div>
+        <div v-if="species.audio_url" class="species-audio">
+          <div class="species-audio__header">
+            <div>
+              <div class="species-audio__label">Голос вида</div>
+              <div class="species-audio__title">{{ species.audio_title || species.name_ru }}</div>
+            </div>
+          </div>
+          <audio class="species-audio__player" controls preload="none" :src="species.audio_url">
+            Ваш браузер не поддерживает воспроизведение аудио.
+          </audio>
+          <div class="species-audio__source">
+            <span v-if="species.audio_source">{{ species.audio_source }}</span>
+            <span v-if="species.audio_source && species.audio_license"> · </span>
+            <span v-if="species.audio_license">{{ species.audio_license }}</span>
+          </div>
+        </div>
         <div v-if="species.do_dont_rules" class="detail-rules">
           <div class="rule-card"><span class="rule-card__icon">&#9888;</span><span>{{ species.do_dont_rules }}</span></div>
         </div>
@@ -39,19 +66,49 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../api/client'
+import { buildSpeciesEditorialSections } from '../utils/speciesEditorialSections'
 
 const route = useRoute()
-const species = ref<any>(null)
+interface SpeciesDetail {
+  id: number
+  name_ru: string
+  name_latin: string
+  group: string
+  category: string
+  conservation_status?: string | null
+  is_poisonous: boolean
+  season_info?: string | null
+  biotopes?: string | null
+  description?: string | null
+  do_dont_rules?: string | null
+  photo_urls?: string[] | null
+  audio_url?: string | null
+  audio_title?: string | null
+  audio_source?: string | null
+  audio_license?: string | null
+}
+
+const species = ref<SpeciesDetail | null>(null)
 const discoverer = ref<any>(null)
 
 const GROUP_ICONS: Record<string, string> = { plants: '🌿', fungi: '🍄', insects: '🐛', herpetofauna: '🐍', birds: '🐦', mammals: '🦔' }
 const GROUP_LABELS: Record<string, string> = { plants: 'Растения', fungi: 'Грибы', insects: 'Насекомые', herpetofauna: 'Герпетофауна', birds: 'Птицы', mammals: 'Млекопитающие' }
 const CATEGORY_LABELS: Record<string, string> = { ruderal: 'Рудеральный', typical: 'Типичный', rare: 'Редкий', red_book: 'Красная книга', synanthropic: 'Синантроп' }
 
-const groupIcon = computed(() => GROUP_ICONS[species.value?.group] || '🌱')
-const groupLabel = computed(() => GROUP_LABELS[species.value?.group] || '')
-const categoryLabel = computed(() => CATEGORY_LABELS[species.value?.category] || '')
+const groupIcon = computed(() => {
+  const group = species.value?.group
+  return group ? GROUP_ICONS[group] || '🌱' : '🌱'
+})
+const groupLabel = computed(() => {
+  const group = species.value?.group
+  return group ? GROUP_LABELS[group] || '' : ''
+})
+const categoryLabel = computed(() => {
+  const category = species.value?.category
+  return category ? CATEGORY_LABELS[category] || '' : ''
+})
 const imgStyle = computed(() => species.value?.photo_urls?.length ? { backgroundImage: `url(${species.value.photo_urls[0]})` } : {})
+const editorialSections = computed(() => species.value ? buildSpeciesEditorialSections(species.value) : [])
 
 function formatDate(iso: string): string {
   const d = new Date(iso)
@@ -89,6 +146,17 @@ onMounted(async () => {
 .meta-item__label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #8FA5AB; margin-bottom: 4px; }
 .meta-item__value { font-size: 14px; font-weight: 600; color: #2C3E4A; }
 .detail-description { font-size: 15px; color: #4A6572; line-height: 1.8; }
+.field-guide { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 22px; }
+.field-guide__item { padding: 16px; border-radius: 8px; background: #F3F7F8; border: 1px solid rgba(42,122,110,0.14); }
+.field-guide__eyebrow { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #2A7A6E; margin-bottom: 6px; }
+.field-guide__item h2 { margin: 0 0 8px; font-family: var(--font-body); font-size: 15px; line-height: 1.3; color: #1B4D4F; }
+.field-guide__item p { margin: 0; font-size: 13px; line-height: 1.6; color: #4A6572; overflow-wrap: anywhere; }
+.species-audio { margin-top: 22px; padding: 16px; border-radius: 8px; background: #E8EEF0; border: 1px solid rgba(42,122,110,0.16); }
+.species-audio__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.species-audio__label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #2A7A6E; margin-bottom: 4px; }
+.species-audio__title { font-size: 15px; font-weight: 700; color: #1B4D4F; }
+.species-audio__player { width: 100%; display: block; height: 36px; }
+.species-audio__source { margin-top: 10px; font-size: 12px; line-height: 1.5; color: #4A6572; }
 .detail-rules { margin-top: 24px; }
 .rule-card { padding: 16px; border-radius: 6px; font-size: 13px; font-weight: 600; display: flex; align-items: flex-start; gap: 10px; background: rgba(255,152,0,0.08); color: #E65100; border-left: 3px solid #FF9800; }
 .rule-card__icon { font-size: 18px; flex-shrink: 0; }
@@ -99,5 +167,6 @@ onMounted(async () => {
 .detail-loading { text-align: center; padding: 60px; color: #8FA5AB; }
 .discoverer-block { display: flex; align-items: center; gap: 10px; margin-top: 20px; padding: 14px 16px; background: rgba(42,122,110,0.06); border-radius: 8px; border-left: 3px solid #2A7A6E; font-size: 14px; color: #1B4D4F; }
 .discoverer-icon { font-size: 22px; flex-shrink: 0; }
+@media (max-width: 900px) { .field-guide { grid-template-columns: 1fr; } }
 @media (max-width: 768px) { .detail-header { grid-template-columns: 1fr; } }
 </style>

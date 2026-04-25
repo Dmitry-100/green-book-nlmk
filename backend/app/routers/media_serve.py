@@ -14,6 +14,12 @@ from app.config import settings
 router = APIRouter(prefix="/api/media", tags=["media"])
 
 MEDIA_DIR = Path(__file__).resolve().parent.parent.parent / "media"
+AUDIO_CONTENT_TYPES = {
+    ".mp3": "audio/mpeg",
+    ".oga": "audio/ogg",
+    ".ogg": "audio/ogg",
+    ".wav": "audio/wav",
+}
 
 
 def _serve_from_minio_or_disk(s3_key: str, fallback_dir: str, filename: str, content_type: str, cache_max_age: int = 86400):
@@ -75,6 +81,18 @@ def serve_species_photo(filename: str):
 @router.get("/species-pdf/{filename}")
 def serve_species_pdf_photo(filename: str):
     return _serve_from_minio_or_disk(f"species-pdf/{filename}", "species-pdf", filename, "image/png")
+
+
+@router.get("/species-audio/{filename}")
+def serve_species_audio(filename: str):
+    content_type = AUDIO_CONTENT_TYPES.get(Path(filename).suffix.lower(), "application/octet-stream")
+    return _serve_from_minio_or_disk(
+        f"species-audio/{filename}",
+        "species-audio",
+        filename,
+        content_type,
+        cache_max_age=604800,
+    )
 
 
 @router.get("/observations/{filename}")

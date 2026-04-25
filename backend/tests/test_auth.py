@@ -1,5 +1,6 @@
 
 from app.config import settings
+from app.models.user import User, UserRole
 from tests.conftest import make_token
 
 
@@ -66,3 +67,30 @@ def test_dev_token_endpoint_returns_access_token_alias(client, monkeypatch):
     assert payload["token_type"] == "bearer"
     assert payload["access_token"] == payload["token"]
     assert payload["user"]["role"] == "admin"
+
+
+def test_existing_dev_user_display_name_is_aligned_with_token(client, db, monkeypatch):
+    monkeypatch.setattr(settings, "app_env", "development")
+    user = User(
+        external_id="dev-employee-employee",
+        display_name="Сотников Д.С.",
+        email="employee@nlmk.com",
+        role=UserRole.employee,
+    )
+    db.add(user)
+    db.commit()
+
+    token = make_token(
+        external_id="dev-employee-employee",
+        name="Dev employee",
+        email="employee@nlmk.com",
+        role="employee",
+    )
+
+    response = client.get(
+        "/api/gamification/profile",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["display_name"] == "Дмитрий Максимович Сотников"

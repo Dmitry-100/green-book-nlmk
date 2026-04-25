@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.auth import get_optional_user
 from app.config import settings
 from app.database import get_db
+from app.models.gamification import UserPoints
 from app.models.observation import Observation, ObservationStatus
 from app.models.species import Species
 from app.models.user import User, UserRole
@@ -137,6 +138,40 @@ def _build_monthly_challenge(db: Session) -> dict | None:
     }
 
 
+def _build_community_payload(db: Session) -> dict:
+    leaders_rows = (
+        db.query(
+            UserPoints.user_id,
+            User.display_name,
+            func.sum(UserPoints.points).label("total_points"),
+        )
+        .join(User, User.id == UserPoints.user_id)
+        .group_by(UserPoints.user_id, User.display_name)
+        .order_by(func.sum(UserPoints.points).desc(), UserPoints.user_id.asc())
+        .limit(3)
+        .all()
+    )
+    active_observers = (
+        db.query(func.count(func.distinct(Observation.author_id)))
+        .filter(Observation.author_id.is_not(None))
+        .scalar()
+        or 0
+    )
+
+    return {
+        "active_observers": active_observers,
+        "leaderboard_period": "all",
+        "leaders": [
+            {
+                "user_id": user_id,
+                "display_name": display_name,
+                "total_points": int(total_points or 0),
+            }
+            for user_id, display_name, total_points in leaders_rows
+        ],
+    }
+
+
 def _build_summary_payload(db: Session) -> dict:
     species_total = db.query(func.count(Species.id)).scalar() or 0
     species_by_group_rows = (
@@ -164,6 +199,7 @@ def _build_summary_payload(db: Session) -> dict:
             "category": species.category.value if species.category else None,
             "is_poisonous": species.is_poisonous,
             "photo_urls": species.photo_urls or [],
+            "audio_url": species.audio_url,
         }
         for species in recent_species_rows
     ]
@@ -212,6 +248,7 @@ def _build_summary_payload(db: Session) -> dict:
         "recent_observations": recent_observations,
         "fact_of_day": _build_fact_of_day(db),
         "challenge": _build_monthly_challenge(db),
+        "community": _build_community_payload(db),
     }
 
 
@@ -257,6 +294,7 @@ def dashboard_summary(
         "recent_observations": common_payload["recent_observations"],
         "fact_of_day": common_payload["fact_of_day"],
         "challenge": common_payload["challenge"],
+        "community": common_payload["community"],
     }
     return Response(
         content=orjson.dumps(payload),
