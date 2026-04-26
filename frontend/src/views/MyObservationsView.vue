@@ -2,12 +2,13 @@
   <div class="my-obs-page">
     <h1>Мои наблюдения</h1>
     <div class="filters">
-      <el-select v-model="statusFilter" placeholder="Статус" clearable @change="fetchObs">
-        <el-option label="На проверке" value="on_review" />
-        <el-option label="Нужны данные" value="needs_data" />
-        <el-option label="Подтверждено" value="confirmed" />
-        <el-option label="Отклонено" value="rejected" />
-      </el-select>
+      <select v-model="statusFilter" class="native-select" @change="fetchObs">
+        <option value="">Все статусы</option>
+        <option value="on_review">На проверке</option>
+        <option value="needs_data">Нужны данные</option>
+        <option value="confirmed">Подтверждено</option>
+        <option value="rejected">Отклонено</option>
+      </select>
       <router-link to="/observe" class="btn-add">+ Новое наблюдение</router-link>
     </div>
     <div class="obs-list">
@@ -69,6 +70,21 @@ onMounted(fetchObs)
 .my-obs-page { max-width: 800px; margin: 0 auto; padding: 32px; }
 .my-obs-page h1 { font-family: 'Cormorant Garamond', serif; font-size: 30px; font-weight: 600; color: #1B4D4F; margin-bottom: 20px; }
 .filters { display: flex; gap: 12px; margin-bottom: 24px; align-items: center; }
+.native-select {
+  min-width: 180px;
+  height: 32px;
+  border: 1px solid #D6E0E3;
+  border-radius: 8px;
+  padding: 0 32px 0 11px;
+  background: #FFFFFF;
+  color: #2C3E4A;
+  font: inherit;
+}
+.native-select:focus {
+  outline: none;
+  border-color: #2A7A6E;
+  box-shadow: 0 0 0 2px rgba(42,122,110,0.12);
+}
 .btn-add { padding: 8px 16px; background: #2A7A6E; color: white; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 600; margin-left: auto; }
 .btn-add:hover { background: #3DAA8E; }
 .obs-list { display: flex; flex-direction: column; gap: 8px; }

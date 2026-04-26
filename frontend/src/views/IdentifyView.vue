@@ -36,8 +36,10 @@
         </div>
       </div>
       <div class="step-actions">
-        <el-button @click="step = 1">Назад</el-button>
-        <el-button type="primary" @click="createWithUnknown">Не нашёл — создать наблюдение</el-button>
+        <button type="button" class="native-button" @click="step = 1">Назад</button>
+        <button type="button" class="native-button native-button--primary" @click="createWithUnknown">
+          Не нашёл — создать наблюдение
+        </button>
       </div>
     </div>
 
@@ -46,7 +48,7 @@
       <h2>Отлично!</h2>
       <p>Вы выбрали: <strong>{{ selectedSpecies?.name_ru }}</strong> ({{ selectedSpecies?.name_latin }})</p>
       <div class="step-actions">
-        <el-button @click="step = 2">Назад</el-button>
+        <button type="button" class="native-button" @click="step = 2">Назад</button>
         <router-link :to="`/observe?species=${selectedSpecies?.id}&group=${selectedGroup}`" class="btn-primary">
           Создать наблюдение с этим видом
         </router-link>
@@ -137,6 +139,30 @@ function createWithUnknown() {
 .species-tile__body strong { display: block; font-size: 13px; color: #2C3E4A; margin-bottom: 2px; }
 .species-tile__latin { font-style: italic; font-size: 11px; color: #8FA5AB; font-family: 'Cormorant Garamond', serif; }
 .step-actions { display: flex; gap: 12px; margin-top: 24px; justify-content: flex-end; }
+.native-button {
+  min-height: 36px;
+  border: 1px solid #D6E0E3;
+  border-radius: 8px;
+  padding: 0 16px;
+  background: #FFFFFF;
+  color: #2C3E4A;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.native-button:hover {
+  border-color: #2A7A6E;
+  color: #1B4D4F;
+}
+.native-button--primary {
+  border-color: #2A7A6E;
+  background: #2A7A6E;
+  color: #FFFFFF;
+}
+.native-button--primary:hover {
+  background: #3DAA8E;
+  color: #FFFFFF;
+}
 .btn-primary { padding: 10px 20px; background: #2A7A6E; color: white; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; }
 .btn-primary:hover { background: #3DAA8E; }
 </style>

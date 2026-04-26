@@ -74,6 +74,7 @@ class Settings(BaseSettings):
         default=0, ge=0, le=1_000_000
     )
     health_dependency_timeout_ms: int = Field(default=250, ge=50, le=10_000)
+    health_dependency_cache_ttl_seconds: float = Field(default=3.0, ge=0.0, le=60.0)
     ymaps_config_cache_ttl_seconds: int = 3600
     log_level: str = "INFO"
     log_json: bool = True

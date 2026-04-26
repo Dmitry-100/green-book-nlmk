@@ -23,30 +23,41 @@
         <div class="form-row">
           <div class="form-group">
             <label>Дата и время *</label>
-            <el-date-picker v-model="form.observed_at" type="datetime" style="width:100%" />
+            <input
+              v-model="observedAtInput"
+              class="native-input"
+              type="datetime-local"
+              required
+            />
           </div>
           <div class="form-group">
             <label>Предполагаемый вид</label>
-            <el-select
+            <select
               v-model="form.species_id"
-              filterable
-              clearable
-              placeholder="Выберите вид (если известен)"
-              style="width: 100%"
+              class="native-input"
               :disabled="!form.group || speciesLoading"
             >
-              <el-option
+              <option :value="null">
+                {{ speciesLoading ? 'Загрузка видов...' : 'Выберите вид (если известен)' }}
+              </option>
+              <option
                 v-for="species in speciesOptions"
                 :key="species.id"
-                :label="`${species.name_ru} (${species.name_latin})`"
                 :value="species.id"
-              />
-            </el-select>
+              >
+                {{ species.name_ru }} ({{ species.name_latin }})
+              </option>
+            </select>
           </div>
         </div>
         <div class="form-group" style="margin-top:16px">
           <label>Комментарий</label>
-          <el-input v-model="form.comment" type="textarea" :rows="3" placeholder="Описание: что делало, сколько особей..." />
+          <textarea
+            v-model="form.comment"
+            class="native-textarea"
+            rows="3"
+            placeholder="Описание: что делало, сколько особей..."
+          ></textarea>
         </div>
       </div>
 
@@ -75,38 +86,52 @@
 
       <!-- Incident toggle -->
       <div class="form-section">
-        <el-checkbox v-model="form.is_incident" label="Это инцидент (раненое/погибшее животное)" />
+        <label class="native-checkbox">
+          <input v-model="form.is_incident" type="checkbox" />
+          <span>Это инцидент (раненое/погибшее животное)</span>
+        </label>
         <div v-if="form.is_incident" class="incident-fields">
-          <el-select v-model="form.incident_type" placeholder="Тип инцидента" style="width:200px">
-            <el-option label="Раненое" value="injured" />
-            <el-option label="Погибшее" value="dead" />
-            <el-option label="Массовая гибель" value="mass_death" />
-            <el-option label="Другое" value="other" />
-          </el-select>
-          <el-select v-model="form.incident_severity" placeholder="Серьёзность" style="width:200px">
-            <el-option label="Низкая" value="low" />
-            <el-option label="Средняя" value="medium" />
-            <el-option label="Высокая" value="high" />
-            <el-option label="Критическая" value="critical" />
-          </el-select>
+          <select v-model="form.incident_type" class="native-input native-input--compact">
+            <option value="">Тип инцидента</option>
+            <option value="injured">Раненое</option>
+            <option value="dead">Погибшее</option>
+            <option value="mass_death">Массовая гибель</option>
+            <option value="other">Другое</option>
+          </select>
+          <select v-model="form.incident_severity" class="native-input native-input--compact">
+            <option value="">Серьезность</option>
+            <option value="low">Низкая</option>
+            <option value="medium">Средняя</option>
+            <option value="high">Высокая</option>
+            <option value="critical">Критическая</option>
+          </select>
         </div>
       </div>
 
       <!-- Safety -->
       <div class="form-section">
         <div class="safety-check">
-          <el-checkbox v-model="form.safety_checked">
-            <strong>Техника безопасности:</strong> Я подтверждаю соблюдение правил ТБ на территории промплощадки.
-          </el-checkbox>
+          <label class="native-checkbox native-checkbox--safety">
+            <input v-model="form.safety_checked" type="checkbox" />
+            <span>
+              <strong>Техника безопасности:</strong>
+              Я подтверждаю соблюдение правил ТБ на территории промплощадки.
+            </span>
+          </label>
         </div>
       </div>
 
       <div class="form-actions">
         <p v-if="submitError" class="submit-error">{{ submitError }}</p>
-        <el-button @click="$router.back()">Отмена</el-button>
-        <el-button type="primary" @click="submit" :disabled="!canSubmit" :loading="submitting">
-          Отправить на проверку
-        </el-button>
+        <button type="button" class="native-button" @click="router.back()">Отмена</button>
+        <button
+          type="button"
+          class="native-button native-button--primary"
+          :disabled="!canSubmit || submitting"
+          @click="submit"
+        >
+          {{ submitting ? 'Отправляем...' : 'Отправить на проверку' }}
+        </button>
       </div>
     </div>
   </div>
@@ -117,6 +142,10 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api, { getCached } from '../api/client'
 import { loadYmaps } from '../services/ymapsLoader'
+import {
+  fromDatetimeLocalInputValue,
+  toDatetimeLocalInputValue,
+} from '../utils/datetimeLocal'
 
 interface SpeciesOption {
   id: number
@@ -165,6 +194,16 @@ const canSubmit = computed(() => {
   if (!form.group || !form.safety_checked || photos.value.length === 0) return false
   if (form.is_incident && (!form.incident_type || !form.incident_severity)) return false
   return true
+})
+
+const observedAtInput = computed({
+  get: () => toDatetimeLocalInputValue(form.observed_at),
+  set: (value: string) => {
+    const nextDate = fromDatetimeLocalInputValue(value)
+    if (nextDate) {
+      form.observed_at = nextDate
+    }
+  },
 })
 
 async function loadSpecies(group: string) {
@@ -372,6 +411,91 @@ async function submit() {
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .form-group { display: flex; flex-direction: column; gap: 6px; }
 .form-group label { font-size: 13px; font-weight: 600; color: #2C3E4A; }
+.native-input {
+  height: 32px;
+  width: 100%;
+  border: 1px solid #D6E0E3;
+  border-radius: 8px;
+  padding: 0 11px;
+  background: #FFFFFF;
+  color: #2C3E4A;
+  font: inherit;
+}
+.native-input:focus {
+  outline: none;
+  border-color: #2A7A6E;
+  box-shadow: 0 0 0 2px rgba(42,122,110,0.12);
+}
+.native-input--compact {
+  width: 200px;
+}
+.native-textarea {
+  width: 100%;
+  min-height: 82px;
+  border: 1px solid #D6E0E3;
+  border-radius: 8px;
+  padding: 9px 11px;
+  background: #FFFFFF;
+  color: #2C3E4A;
+  font: inherit;
+  line-height: 1.45;
+  resize: vertical;
+}
+.native-textarea:focus {
+  outline: none;
+  border-color: #2A7A6E;
+  box-shadow: 0 0 0 2px rgba(42,122,110,0.12);
+}
+.native-checkbox {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #2C3E4A;
+  font-size: 14px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.native-checkbox input {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  accent-color: #2A7A6E;
+}
+.native-checkbox--safety {
+  align-items: flex-start;
+}
+.native-checkbox--safety input {
+  margin-top: 2px;
+}
+.native-button {
+  min-height: 36px;
+  border: 1px solid #D6E0E3;
+  border-radius: 8px;
+  padding: 0 16px;
+  background: #FFFFFF;
+  color: #2C3E4A;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.native-button:hover:not(:disabled) {
+  border-color: #2A7A6E;
+  color: #1B4D4F;
+}
+.native-button--primary {
+  border-color: #2A7A6E;
+  background: #2A7A6E;
+  color: #FFFFFF;
+}
+.native-button--primary:hover:not(:disabled) {
+  background: #3DAA8E;
+  color: #FFFFFF;
+}
+.native-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 
 /* Map */
 .observe-map { width: 100%; height: 280px; border-radius: 12px; overflow: hidden; background: #D6E0E3; }
@@ -400,7 +524,6 @@ async function submit() {
 
 .incident-fields { display: flex; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
 .safety-check { padding: 16px; background: rgba(255,152,0,0.06); border: 1px solid rgba(255,152,0,0.15); border-radius: 12px; }
-.safety-check :deep(.el-checkbox__label) { white-space: normal; word-break: break-word; line-height: 1.5; }
 .form-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
 .submit-error {
   margin-right: auto;

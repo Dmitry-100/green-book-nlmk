@@ -3,18 +3,19 @@
     <div class="map-sidebar">
       <h2>Карта наблюдений</h2>
       <div class="map-filters">
-        <el-select v-model="groupFilter" placeholder="Группа" clearable @change="fetchPoints" size="small">
-          <el-option label="Растения" value="plants" />
-          <el-option label="Грибы" value="fungi" />
-          <el-option label="Насекомые" value="insects" />
-          <el-option label="Герпетофауна" value="herpetofauna" />
-          <el-option label="Птицы" value="birds" />
-          <el-option label="Млекопитающие" value="mammals" />
-        </el-select>
-        <el-select v-model="statusFilter" placeholder="Статус" @change="fetchPoints" size="small">
-          <el-option label="Подтверждено" value="confirmed" />
-          <el-option v-if="auth.isEcologist()" label="На проверке" value="on_review" />
-        </el-select>
+        <select v-model="groupFilter" class="native-select native-select--small" @change="fetchPoints()">
+          <option value="">Все группы</option>
+          <option value="plants">Растения</option>
+          <option value="fungi">Грибы</option>
+          <option value="insects">Насекомые</option>
+          <option value="herpetofauna">Герпетофауна</option>
+          <option value="birds">Птицы</option>
+          <option value="mammals">Млекопитающие</option>
+        </select>
+        <select v-model="statusFilter" class="native-select native-select--small" @change="fetchPoints()">
+          <option value="confirmed">Подтверждено</option>
+          <option v-if="auth.isEcologist()" value="on_review">На проверке</option>
+        </select>
       </div>
       <div class="map-stats">
         <div class="map-stat">
@@ -343,6 +344,24 @@ onUnmounted(() => {
   color: var(--teal-dark);
 }
 .map-filters { display: flex; flex-direction: column; gap: 8px; }
+.native-select {
+  width: 100%;
+  border: 1px solid #D6E0E3;
+  border-radius: 8px;
+  padding: 0 32px 0 11px;
+  background: #FFFFFF;
+  color: #2C3E4A;
+  font: inherit;
+}
+.native-select--small {
+  height: 28px;
+  font-size: 13px;
+}
+.native-select:focus {
+  outline: none;
+  border-color: #2A7A6E;
+  box-shadow: 0 0 0 2px rgba(42,122,110,0.12);
+}
 .map-stats { display: flex; gap: 12px; }
 .map-stat {
   background: var(--slate-bg);
