@@ -2058,3 +2058,1484 @@
 - `docker compose exec -T backend pytest tests/test_admin_ops_summary.py tests/test_species.py -q` — `28 passed`.
 - `npm run test:unit` — `35 passed`.
 - `npm run build` — ok; прежнее предупреждение Vite про `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+
+## P69 — Latency observability v3
+
+- [x] Добавить tail-latency в runtime metrics:
+  - `p95_duration_ms`;
+  - `p99_duration_ms`;
+  - `max_duration_ms`;
+  - `slow_routes`.
+- [x] Добавить Prometheus histogram:
+  - `greenbook_api_duration_ms_bucket/sum/count`;
+  - `greenbook_api_route_duration_ms_bucket/sum/count`.
+- [x] Сохранить route-label нормализацию через FastAPI route path, чтобы
+  path-параметры не раздували cardinality.
+
+Ожидаемый эффект:
+- можно видеть не только среднее время ответа, но и хвосты latency;
+- slow routes можно искать без внешнего APM;
+- Prometheus/Grafana получают histogram-метрики для p95/p99.
+
+Риски:
+- p95/p99 считаются по фиксированным buckets, поэтому это приближенная оценка;
+- слишком детальные route labels всё ещё могут раздувать метрики, если добавить
+  новые endpoints без FastAPI route path.
+
+Критерии готовности:
+- `/api/metrics` возвращает `p95_duration_ms`, `p99_duration_ms`, `slow_routes`;
+- `/api/metrics/prometheus` возвращает histogram series;
+- backend tests и ruff проходят.
+
+### Проверки P69
+
+- `docker compose exec -T backend pytest -q tests/test_metrics.py` — `5 passed`.
+- `docker compose exec -T backend ruff check app/services/metrics.py tests/test_metrics.py` — green.
+
+## P70 — Perf smoke regression guard v2
+
+- [x] Расширить `scripts/perf_smoke_ci.py` проверкой `p99_budget_ms`.
+- [x] Добавить `--profile local`:
+  - меньше запросов и concurrency;
+  - сценарий укладывается в dev rate limit;
+  - CI-профиль остается полным по умолчанию.
+- [x] Зафиксировать профили в observability runbook.
+
+Ожидаемый эффект:
+- редкие хвостовые задержки перестают прятаться за p95;
+- локально можно запускать perf smoke без ложных `429`;
+- CI продолжает проверять более жесткий сценарий.
+
+Риски:
+- локальный профиль не заменяет полноценный нагрузочный тест;
+- budgets остаются dev/staging-ориентирами и требуют пересмотра на реальных
+  данных компании.
+
+Критерии готовности:
+- `--profile local` проходит на текущем dev-стеке;
+- `--profile ci` остается совместимым с существующим CI workflow;
+- script компилируется и документирован.
+
+### Проверки P70
+
+- `python3 -m py_compile scripts/perf_smoke_ci.py` — ok.
+- `python3 scripts/perf_smoke_ci.py --base-url http://127.0.0.1:8000 --profile local --timeout 8` — `PERF_SMOKE_OK`.
+
+## P71 — Cheaper MinIO readiness
+
+- [x] Заменить MinIO health operation:
+  - было: `list_buckets`;
+  - стало: `head_bucket` для конкретного `MINIO_BUCKET`.
+- [x] Добавить short cache для MinIO dependency result:
+  - `HEALTH_DEPENDENCY_CACHE_TTL_SECONDS`;
+  - default `3.0` секунды;
+  - `cached=true/false` в `dependency_details.minio`.
+- [x] Добавить reset helper для тестов dependency-health cache.
+
+Ожидаемый эффект:
+- `/api/health/ready` меньше зависит от дорогих MinIO операций;
+- частые readiness/deps запросы не создают лишний шум в object storage;
+- диагностика MinIO остается доступной через те же endpoints.
+
+Риски:
+- при TTL > 0 деградация MinIO может отображаться с задержкой до TTL;
+- для production TTL нужно оставить коротким или задавать явно.
+
+Критерии готовности:
+- MinIO health вызывает `head_bucket`, а не `list_buckets`;
+- повторный dependency check в пределах TTL использует cache;
+- health tests проходят.
+
+### Проверки P71
+
+- `docker compose exec -T backend pytest -q tests/test_health.py` — `7 passed`.
+- `docker compose exec -T backend ruff check app/routers/health.py app/config.py tests/test_health.py` — green.
+
+## P72 — Admin view decomposition
+
+- [x] Вынести ops summary/alerts в `AdminOpsPanel`:
+  - карточки catalog/pipeline/incidents/audit/errors;
+  - новые latency-карточки `API p95` и `API p99`;
+  - блок threshold alerts.
+- [x] Вынести catalog quality header/stats/gap actions/candidates table в
+  `AdminCatalogQualityPanel`.
+- [x] Вынести CSV import preview/history/details в `AdminCatalogImportPanel`.
+- [x] Вынести species filters/table/pagination в `AdminSpeciesCatalogTable`.
+- [x] Вынести зоны и справку по ролям в `AdminZoneImportPanel` и
+  `AdminRolesPanel`.
+- [x] Вынести add/edit species dialogs в общий `AdminSpeciesFormDialog`.
+- [x] Вынести API/state для species CRUD/filters/pagination в
+  `useAdminSpeciesCatalog`.
+- [x] Вынести API/state для CSV import preview/apply/history/rollback в
+  `useAdminCatalogImport`.
+- [x] Вынести API/state для catalog quality/export в
+  `useAdminCatalogQuality`.
+- [x] Вынести API/state для audit/ops в `useAdminAuditOps`.
+- [x] Вынести audit tab markup/table/retention controls в `AdminAuditPanel`.
+
+Ожидаемый эффект:
+- `AdminView.vue` уменьшился примерно с `1806` до `322` строк и теперь меньше смешивает ops/catalog/species UI;
+- новые latency-метрики доступны в админском интерфейсе без отдельного API-запроса;
+- последующие изменения в аудите, quality panel и CSV import станут менее рискованными;
+- критичные admin-сценарии получили изолированные unit-тесты на фильтры, export,
+  import, rollback и purge.
+
+Риски:
+- `AdminView.vue` всё еще держит общий layout вкладок;
+- для дальнейшего снижения размера chunk нужны уже не только refactor, но и
+  более тонкое code splitting Element Plus/админских экранов.
+
+Критерии готовности:
+- frontend unit tests и production build проходят;
+- audit tab сохраняет ops summary/alerts;
+- species tab сохраняет quality counters, gap filters, CSV actions и таблицу видов;
+- zone/users tabs отображаются через отдельные компоненты.
+
+### Проверки P72
+
+- `npm run test:unit -- src/composables/admin/useAdminCatalogQuality.test.ts src/composables/admin/useAdminAuditOps.test.ts src/composables/admin/useAdminCatalogImport.test.ts src/composables/admin/useAdminSpeciesCatalog.test.ts src/utils/speciesAdminForm.test.ts` — `31 passed`.
+- `npm run test:unit` — `47 passed`.
+- `docker compose exec -T backend pytest -q` — `166 passed, 2 skipped`.
+- `docker compose exec -T backend ruff check app tests` — green.
+- `git diff --check` — clean.
+- `python3 scripts/perf_smoke_ci.py --base-url http://127.0.0.1:8000 --profile local --timeout 8` — `PERF_SMOKE_OK`.
+- `npm run build` — ok; прежнее предупреждение Vite про `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+
+## P73 — Admin frontend chunk splitting
+
+- [x] Перевести тяжелые admin-панели на `defineAsyncComponent`:
+  - `AdminAuditPanel`;
+  - `AdminCatalogImportPanel`;
+  - `AdminCatalogQualityPanel`;
+  - `AdminSpeciesCatalogTable`;
+  - `AdminSpeciesFormDialog`;
+  - `AdminZoneImportPanel`;
+  - `AdminRolesPanel`.
+- [x] Не грузить add/edit species dialogs до открытия:
+  - добавлен `v-if="showAddSpecies"`;
+  - добавлен `v-if="showEditSpecies"`.
+- [x] Добавить regression guard для размера frontend bundle:
+  - `scripts/frontend_bundle_budget.py`;
+  - default budget для `AdminView-*.js`: `60_000` bytes;
+  - тесты helper-логики в `backend/tests/test_frontend_bundle_budget_script.py`.
+
+Ожидаемый эффект:
+- основной `AdminView` JS chunk уменьшился примерно с `218.86 KB` до
+  `34.46 KB` raw;
+- gzip-размер основного `AdminView` chunk уменьшился примерно с `71.15 KB` до
+  `12.15 KB`;
+- audit/import/dialog/table код теперь разбит на отдельные chunks и не входит
+  в стартовый bundle админского маршрута;
+- CI сможет ловить случайный возврат тяжелых статических импортов через bundle
+  budget.
+
+Риски:
+- при первом открытии некоторых вкладок появится отдельная догрузка chunk;
+- для дефолтной вкладки `species` async-панели всё равно догружаются сразу
+  после открытия админки;
+- budget проверяет raw chunk size, а не полный waterfall всех lazy chunks.
+
+Критерии готовности:
+- `AdminView-*.js` после `npm run build` укладывается в `60_000` bytes;
+- frontend unit tests и production build проходят;
+- админские вкладки остаются доступными через lazy panels.
+
+### Проверки P73
+
+- `npm run test:unit` — `47 passed`.
+- `npm run build` — ok; `AdminView-t5EzhPXV.js 34.46 KB`, gzip `12.15 KB`;
+  прежнее предупреждение Vite про `/api/media/species-pdf/page23_img07.png`
+  остаётся runtime-resolved.
+- `docker compose exec -T backend pytest -q` — `166 passed, 5 skipped`
+  (script tests for root-level scripts are skipped inside backend-only docker
+  volume).
+- `docker compose exec -T backend ruff check app tests` — green.
+- `python3 -m py_compile scripts/frontend_bundle_budget.py` — ok.
+- `python3 scripts/frontend_bundle_budget.py --assets-dir frontend/dist/assets`
+  — `FRONTEND_BUNDLE_BUDGET_OK`.
+- `git diff --check` — clean.
+
+## P74 — Observe route bundle diet and bundle report
+
+- [x] Убрать `ElDatePicker` из `ObserveView`:
+  - заменен на native `input type="datetime-local"`;
+  - добавлена утилита `datetimeLocal.ts` для локального форматирования/парсинга;
+  - добавлены unit-тесты на форматирование, парсинг и invalid values.
+- [x] Расширить `scripts/frontend_bundle_budget.py`:
+  - default budget для `ObserveView-*.js`: `25_000` bytes;
+  - `--top-assets N` для отчёта по самым тяжелым JS/CSS assets;
+  - helper `_largest_assets(...)` покрыт тестом.
+
+Ожидаемый эффект:
+- `ObserveView` JS chunk уменьшился примерно с `100.02 KB` до `9.79 KB`
+  raw;
+- gzip-размер `ObserveView` chunk уменьшился примерно с `30.51 KB` до
+  `4.57 KB`;
+- date/time поле осталось нативным и не требует загрузки тяжелого datepicker
+  кода;
+- bundle-budget теперь защищает два пользовательски важных маршрута:
+  `AdminView` и `ObserveView`.
+
+Риски:
+- native `datetime-local` выглядит чуть менее «Element Plus», но быстрее и
+  достаточно хорош для формы наблюдения;
+- `el-table-column`, `el-tag`, `index` и `base` всё еще остаются крупными
+  lazy/shared chunks; это отдельная оптимизация следующих фаз.
+
+Критерии готовности:
+- `ObserveView-*.js` после `npm run build` укладывается в `25_000` bytes;
+- submit продолжает отправлять `observed_at` как ISO timestamp;
+- frontend unit tests и production build проходят.
+
+### Проверки P74
+
+- `npm run test:unit -- src/utils/datetimeLocal.test.ts` — `3 passed`.
+- `npm run test:unit` — `50 passed`.
+- `npm run build` — ok; `ObserveView-DgKENSf5.js 9.79 KB`, gzip
+  `4.57 KB`; прежнее предупреждение Vite про
+  `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+- `docker compose exec -T backend pytest -q` — `166 passed, 6 skipped`
+  (script tests for root-level scripts are skipped inside backend-only docker
+  volume).
+- `docker compose exec -T backend ruff check app tests` — green.
+- `git diff --check` — clean.
+
+## P75 — Native select pass and Element Plus dependency diet
+
+- [x] Убрать прямые `el-tag` из админских таблиц и статусов:
+  - quality/status badges заменены на локальные CSS-badges;
+  - прямых `<el-tag>` в `frontend/src/views` и `frontend/src/components`
+    больше нет.
+- [x] Перевести простые публичные фильтры на native `<select>`:
+  - `SpeciesListView`: группа и категория;
+  - `MapView`: группа и статус;
+  - `MyObservationsView`: статус;
+  - `ObserveView`: группа, вид инцидента, тяжесть инцидента.
+- [x] Перевести простые админские фильтры на native `<select>`:
+  - `AdminSpeciesCatalogTable`: группа, категория, content gap;
+  - `AdminCatalogImportPanel`: статус CSV-batch;
+  - `AdminAuditPanel`: outcome.
+- [x] Заменить простой выбор чувствительности координат в
+  `ExpertQueueView` на native `<select>`.
+- [x] Оставить Element Plus select там, где он пока оправдан UX:
+  - фильтруемый выбор вида в `ExpertQueueView`;
+  - group/category select в lazy-loaded `AdminSpeciesFormDialog`.
+
+Ожидаемый эффект:
+- публичные маршруты `species-list`, `map`, `observe`, `my-observations`
+  больше не тянут `el-select`/`el-tag` через route-level deps;
+- основной `admin` route-level chunk больше не тянет `el-select`/`el-tag`
+  на входе;
+- оставшиеся `el-select` и косвенный `el-tag` isolated в экспертском flow и
+  lazy-dialog редактирования вида;
+- сохраняется UX поискового выбора вида, где обычный native select был бы
+  заметным ухудшением.
+
+Риски:
+- native select визуально проще Element Plus, поэтому стили зафиксированы
+  локально и компактно;
+- если в будущем потребуется search/filterable поведение в админских
+  фильтрах, можно вернуть Element Plus точечно, но это должно отражаться в
+  bundle budget/route deps.
+
+Критерии готовности:
+- `rg "<el-tag>" frontend/src/views frontend/src/components -g '*.vue'`
+  не находит прямых использований;
+- `el-select` остаётся только в поисковом экспертском выборе и ленивой форме
+  вида;
+- `AdminView-*.js` и `ObserveView-*.js` проходят bundle budget;
+- frontend unit tests, production build, backend tests и ruff проходят.
+
+### Проверки P75
+
+- `npm run test:unit` — `50 passed`.
+- `npm run build` — ok; `AdminView-CMTOquTo.js 34.39 KB`, gzip
+  `12.13 KB`; `ObserveView-b_XAltRT.js 9.91 KB`, gzip `4.57 KB`;
+  прежнее предупреждение Vite про
+  `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+- `python3 -m py_compile scripts/frontend_bundle_budget.py` — ok.
+- `python3 scripts/frontend_bundle_budget.py --assets-dir frontend/dist/assets --top-assets 12`
+  — `FRONTEND_BUNDLE_BUDGET_OK`;
+  `AdminView-CMTOquTo.js 34.43 KB / budget 58.59 KB`,
+  `ObserveView-b_XAltRT.js 10.39 KB / budget 24.41 KB`.
+- `rg -n "<el-tag" frontend/src/views frontend/src/components -g '*.vue'`
+  — прямых использований не найдено.
+- `docker compose exec -T backend pytest -q` — `166 passed, 6 skipped`
+  (script tests for root-level scripts are skipped inside backend-only docker
+  volume).
+- `docker compose exec -T backend ruff check app tests` — green.
+- `git diff --check` — clean.
+
+## P76 — Expert queue dialog lazy loading
+
+- [x] Вынести модальные окна кабинета эколога в отдельный async component:
+  - новый `ExpertQueueDialogs.vue` содержит confirm/request/reject dialogs;
+  - `ExpertQueueView.vue` грузит диалоги через `defineAsyncComponent`;
+  - lazy component монтируется только после первого действия эксперта.
+- [x] Сохранить UX экспертского подтверждения:
+  - фильтруемый выбор вида остался Element Plus select;
+  - чувствительность координат осталась native `<select>`.
+
+Ожидаемый эффект:
+- стартовый route-level deps для `/expert` больше не включает
+  `el-select`, `el-dialog`, `el-tag`;
+- `ExpertQueueView` уменьшился примерно с `6.72 KB` до `5.31 KB` raw;
+- `ExpertQueueDialogs` выделен в отдельный lazy chunk `4.02 KB` raw,
+  gzip `1.62 KB`;
+- тяжелые Element Plus deps экспертского подтверждения загружаются только при
+  открытии действия, а не при входе в очередь.
+
+Риски:
+- первый клик по действию может получить небольшой lazy-load overhead;
+- состояние диалогов хранится в родителе, поэтому дочерний компонент должен
+  оставаться тонким presentation layer без собственной бизнес-логики.
+
+Критерии готовности:
+- route-level deps для `expert-queue` не содержат `el-select`, `el-dialog`,
+  `el-tag`;
+- confirm/request/reject dialogs продолжают вызывать прежние backend actions;
+- frontend unit tests, production build и bundle budget проходят.
+
+### Проверки P76
+
+- `npm run test:unit` — `50 passed`.
+- `npm run build` — ok; `ExpertQueueView-D2nIQ89M.js 5.31 KB`, gzip
+  `2.46 KB`; `ExpertQueueDialogs-DbmxZroN.js 4.02 KB`, gzip `1.62 KB`;
+  прежнее предупреждение Vite про
+  `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+- `python3 -m py_compile scripts/frontend_bundle_budget.py` — ok.
+- `python3 scripts/frontend_bundle_budget.py --assets-dir frontend/dist/assets --top-assets 14`
+  — `FRONTEND_BUNDLE_BUDGET_OK`;
+  `AdminView--mhrBl8k.js 34.43 KB / budget 58.59 KB`,
+  `ObserveView-ZThQ1fG9.js 10.39 KB / budget 24.41 KB`.
+- `rg -n "expert-queue|ExpertQueueView|ExpertQueueDialogs|el-select|el-dialog|el-tag" frontend/dist/assets/index-*.js`
+  — route-level deps для `expert-queue` содержат `ExpertQueueView`,
+  `el-button`, `base`, `client`, shared `index` и CSS, но не содержат
+  `el-select`/`el-dialog`/`el-tag`.
+- `docker compose exec -T backend pytest -q` — `166 passed, 6 skipped`
+  (script tests for root-level scripts are skipped inside backend-only docker
+  volume).
+- `docker compose exec -T backend ruff check app tests` — green.
+
+## P77 — Species directory native controls
+
+- [x] Перевести публичные controls справочника видов на native UI:
+  - search input вместо `el-input`;
+  - clear button с прежним поведением очистки;
+  - checkbox `С голосом` вместо `el-checkbox`.
+- [x] Сохранить существующую сетевую логику:
+  - debounced search (`300ms`);
+  - немедленное обновление после очистки поиска;
+  - cache key и фильтры `/api/species` без изменений.
+
+Ожидаемый эффект:
+- route-level deps для `species-list` больше не включают `el-input`,
+  `el-checkbox`, `el-select`, `el-tag`;
+- старт каталога видов стал ближе к “чистому” Vue + shared client;
+- размер `SpeciesListView` остался около `5.29 KB` raw, gzip `2.33 KB`,
+  а локальный CSS вырос только на компактные стили native controls.
+
+Риски:
+- native controls выглядят проще Element Plus, поэтому focus/clear/checkbox
+  стили зафиксированы локально;
+- дальнейшее усложнение поиска (suggestions/autocomplete) потребует отдельного
+  lazy component, а не возврата тяжелого input в старт маршрута.
+
+Критерии готовности:
+- `SpeciesListView.vue` и `SpeciesCard.vue` не содержат прямых Element Plus
+  form controls;
+- route-level deps для `species-list` не содержат `el-input`,
+  `el-checkbox`, `el-select`, `el-tag`;
+- frontend unit tests, production build и bundle budget проходят.
+
+### Проверки P77
+
+- `rg -n "<el-input|<el-checkbox|<el-select|<el-tag" frontend/src/views/SpeciesListView.vue frontend/src/components/SpeciesCard.vue`
+  — прямых использований не найдено.
+- `npm run test:unit` — `50 passed`.
+- `npm run build` — ok; `SpeciesListView-DtVJOzwr.js 5.29 KB`, gzip
+  `2.33 KB`; `SpeciesListView-BZm2t5X_.css 3.78 KB`, gzip `1.16 KB`;
+  прежнее предупреждение Vite про
+  `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+- `python3 -m py_compile scripts/frontend_bundle_budget.py` — ok.
+- `python3 scripts/frontend_bundle_budget.py --assets-dir frontend/dist/assets --top-assets 14`
+  — `FRONTEND_BUNDLE_BUDGET_OK`;
+  `AdminView-DOyMT4d0.js 34.32 KB / budget 58.59 KB`,
+  `ObserveView-BNkpY6um.js 10.37 KB / budget 24.41 KB`.
+- `rg -n "species-list|SpeciesListView|el-input|el-checkbox|el-select|el-tag" frontend/dist/assets/index-*.js`
+  — route-level deps для `species-list` содержат `SpeciesListView`,
+  `client`, shared `index` и CSS, но не содержат Element Plus form chunks.
+
+## P78 — Observe form native controls
+
+- [x] Перевести форму наблюдения на native controls:
+  - textarea комментария вместо `el-input`;
+  - checkbox инцидента вместо `el-checkbox`;
+  - safety checkbox вместо `el-checkbox`;
+  - кнопки отмены/submit вместо `el-button`.
+- [x] Сохранить поведение формы:
+  - `canSubmit` продолжает блокировать отправку до группы, фото и safety;
+  - при `submitting` submit button показывает `Отправляем...` и disabled;
+  - submit/error/upload/map logic без изменений.
+
+Ожидаемый эффект:
+- route-level deps для `observe` больше не включают `el-input`,
+  `el-checkbox`, `el-button`, `el-select`, `el-tag`;
+- старт формы наблюдения теперь содержит только `ObserveView`, shared client,
+  shared `index`, `ymapsLoader` и CSS;
+- карта остаётся главной оправданной внешней зависимостью маршрута.
+
+Риски:
+- native buttons/checkboxes выглядят проще Element Plus, поэтому добавлены
+  локальные focus/disabled/loading styles;
+- дальнейшее улучшение UX загрузки фото лучше делать отдельно, не возвращая
+  тяжелые controls в старт маршрута.
+
+Критерии готовности:
+- `ObserveView.vue` не содержит прямых Element Plus form/button controls;
+- route-level deps для `observe` не содержат Element Plus form chunks;
+- frontend unit tests, production build и bundle budget проходят.
+
+### Проверки P78
+
+- `rg -n "<el-input|<el-checkbox|<el-button|<el-select|<el-tag" frontend/src/views/ObserveView.vue`
+  — прямых использований не найдено.
+- `npm run test:unit` — `50 passed`.
+- `npm run build` — ok; `ObserveView-DL1RTO4L.js 9.75 KB`, gzip
+  `4.42 KB`; `ObserveView-B-fO_zQg.css 5.00 KB`, gzip `1.40 KB`;
+  прежнее предупреждение Vite про
+  `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+- `python3 -m py_compile scripts/frontend_bundle_budget.py` — ok.
+- `python3 scripts/frontend_bundle_budget.py --assets-dir frontend/dist/assets --top-assets 14`
+  — `FRONTEND_BUNDLE_BUDGET_OK`;
+  `AdminView-CY53g87p.js 34.07 KB / budget 58.59 KB`,
+  `ObserveView-DL1RTO4L.js 10.24 KB / budget 24.41 KB`.
+- `rg -n "observe|ObserveView|el-input|el-checkbox|el-button|el-select|el-tag" frontend/dist/assets/index-*.js`
+  — route-level deps для `observe` содержат `ObserveView`, `client`,
+  shared `index`, `ymapsLoader` и CSS, но не содержат Element Plus form
+  chunks.
+
+## P79 — Identify route native buttons
+
+- [x] Заменить `el-button` в `IdentifyView` на native buttons:
+  - кнопка возврата на шаг 1;
+  - кнопка создания наблюдения без найденного вида;
+  - кнопка возврата на шаг 2.
+- [x] Сохранить прежние переходы step-state и route-link на создание
+  наблюдения.
+
+Ожидаемый эффект:
+- route-level deps для `identify` больше не включают `el-button`;
+- определитель видов стартует как lightweight route без Element Plus
+  controls;
+- `IdentifyView` остался небольшим: `3.86 KB` raw, gzip `1.93 KB`.
+
+Риски:
+- native buttons выглядят проще Element Plus, поэтому локальные hover/primary
+  стили повторяют текущую визуальную иерархию;
+- если в определителе появятся loading/error states, их нужно добавить в
+  native button API точечно.
+
+Критерии готовности:
+- `IdentifyView.vue` не содержит прямых Element Plus controls;
+- route-level deps для `identify` не содержат `el-button`;
+- frontend unit tests, production build и bundle budget проходят.
+
+### Проверки P79
+
+- `rg -n "<el-button|<el-input|<el-checkbox|<el-select|<el-tag" frontend/src/views/IdentifyView.vue`
+  — прямых использований не найдено.
+- `npm run test:unit` — `50 passed`.
+- `npm run build` — ok; `IdentifyView-pYgDixvq.js 3.86 KB`, gzip
+  `1.93 KB`; `IdentifyView-CFG22Avi.css 3.38 KB`, gzip `1.06 KB`;
+  прежнее предупреждение Vite про
+  `/api/media/species-pdf/page23_img07.png` остаётся runtime-resolved.
+- `python3 -m py_compile scripts/frontend_bundle_budget.py` — ok.
+- `python3 scripts/frontend_bundle_budget.py --assets-dir frontend/dist/assets --top-assets 14`
+  — `FRONTEND_BUNDLE_BUDGET_OK`;
+  `AdminView-C0Vwix_t.js 34.07 KB / budget 58.59 KB`,
+  `ObserveView-D8a8rTHq.js 10.24 KB / budget 24.41 KB`.
+- `rg -n "identify|IdentifyView|el-button|el-input|el-checkbox|el-select|el-tag" frontend/dist/assets/index-*.js`
+  — route-level deps для `identify` содержат `IdentifyView`, `client`,
+  shared `index` и CSS, но не содержат `el-button`.
+- `docker compose exec -T backend pytest -q` — `166 passed, 6 skipped`
+  (script tests for root-level scripts are skipped inside backend-only docker
+  volume).
+- `docker compose exec -T backend ruff check app tests` — green.
+- `python3 -m py_compile scripts/frontend_bundle_budget.py` — ok.
+- `python3 scripts/frontend_bundle_budget.py --assets-dir frontend/dist/assets --top-assets 8`
+  — `FRONTEND_BUNDLE_BUDGET_OK`.
+- `git diff --check` — clean.
+
+## P80 — Login and expert queue route native buttons
+
+- [x] Заменить последний route-level `el-button` в `LoginView` на native
+  submit button:
+  - сохранить disabled/loading state;
+  - сохранить прежний submit flow и обработку ошибок;
+  - зафиксировать локальные focus/hover/disabled styles.
+- [x] Заменить route-level action buttons в `ExpertQueueView` на native
+  buttons:
+  - подтверждение;
+  - запрос уточнения;
+  - отклонение.
+- [x] Оставить тяжелые экспертные диалоги в lazy `ExpertQueueDialogs`, потому
+  что Element Plus там оправдан и не попадает в стартовый chunk очереди.
+
+Ожидаемый эффект:
+- route-level deps для `login` больше не включают `el-button`;
+- route-level deps для `expert-queue` больше не включают `el-button`, а
+  диалоги продолжают догружаться отдельно;
+- стартовые chunks остаются компактными: `LoginView` около `1.80 KB` raw,
+  `ExpertQueueView` около `4.97 KB` raw.
+
+Риски:
+- native buttons требуют локальной поддержки disabled/loading/focus states;
+- визуальная консистентность с Element Plus диалогами должна удерживаться CSS,
+  а не возвратом route-level Element Plus imports.
+
+Критерии готовности:
+- `LoginView.vue` и `ExpertQueueView.vue` не содержат прямых Element Plus
+  controls;
+- route map для `login` и `expert-queue` не содержит `el-button`;
+- frontend unit tests, production build и bundle budget проходят.
+
+### Проверки P80
+
+- `rg -n "<el-(button|input|checkbox|select|option|tag|dialog)" frontend/src/views/LoginView.vue frontend/src/views/ExpertQueueView.vue`
+  — прямых использований не найдено.
+- `rg -n "<el-(button|input|checkbox|select|option|tag|dialog)" frontend/src/views -g '*.vue'`
+  — в публичных/hot views остался только `AdminView.vue` как отдельный
+  административный lazy route.
+- `npm run test:unit` — `50 passed`.
+- `npm run build` — ok; `LoginView-sX98KZop.js 1.80 KB`, gzip
+  `1.19 KB`; `ExpertQueueView-blHtaMm-.js 4.96 KB`, gzip `2.29 KB`;
+  `ExpertQueueDialogs-DHr8Yiaa.js 3.87 KB`, gzip `1.55 KB`.
+- `python3 scripts/frontend_bundle_budget.py --assets-dir frontend/dist/assets --top-assets 14`
+  — `FRONTEND_BUNDLE_BUDGET_OK`; `AdminView-YFQqJcL4.js 33.95 KB /
+  budget 58.59 KB`, `ObserveView-sjhYlZqu.js 10.24 KB / budget
+  24.41 KB`, `LoginView-sX98KZop.js 1.93 KB / budget 7.81 KB`.
+- `rg -n "login|LoginView|expert-queue|ExpertQueueView|el-button|el-select|el-dialog|el-tag" frontend/dist/assets/index-*.js`
+  — route-level deps для `login` и `expert-queue` содержат только view,
+  shared chunks, client/userInitials и CSS; `ExpertQueueDialogs` остаётся
+  отдельным lazy chunk.
+
+## P81 — Hot route bundle budgets and no-db script tests
+
+- [x] Расширить `DEFAULT_BUDGETS` в `frontend_bundle_budget.py` с двух
+  маршрутов до полного набора hot routes:
+  - `AdminView-*.js` — 28 KB;
+  - `ObserveView-*.js` — 25 KB;
+  - `SpeciesListView-*.js` — 15 KB;
+  - `ExpertQueueView-*.js` — 12 KB;
+  - `IdentifyView-*.js` — 10 KB;
+  - `LoginView-*.js` — 8 KB.
+- [x] Добавить regression test, который фиксирует обязательное покрытие hot
+  routes бюджетами.
+- [x] Пометить script-only tests как `no_db` и научить session bootstrap не
+  поднимать БД, если выбранный набор тестов состоит только из `no_db`.
+- [x] Исправить dynamic import helpers в script tests под Python 3.13:
+  модуль регистрируется в `sys.modules` до `exec_module`, иначе `@dataclass`
+  с postponed annotations падает при локальном прогоне.
+
+Ожидаемый эффект:
+- bundle regressions теперь ловятся не только для admin/observe, но и для
+  login, identify, species directory и expert queue;
+- быстрые script tests можно запускать локально без Docker и без Postgres;
+- локальная проверка performance tooling стала дешевле и надёжнее.
+
+Риски:
+- budgets нужно периодически пересматривать после крупных UX-фич, но только
+  вместе с осознанным объяснением причины роста;
+- `no_db` marker нельзя ставить на тесты, которые неявно импортируют app/db
+  состояние.
+
+Критерии готовности:
+- default bundle budgets покрывают все hot routes;
+- script-only pytest subset проходит локально без DB bootstrap;
+- backend lint/tests и frontend budget check проходят.
+
+### Проверки P81
+
+- `.venv/bin/python -m pytest -q tests/test_frontend_bundle_budget_script.py tests/test_perf_smoke_ci_script.py`
+  — `7 passed`.
+- `python3 -m py_compile scripts/frontend_bundle_budget.py` — ok.
+- `python3 scripts/frontend_bundle_budget.py --assets-dir frontend/dist/assets --top-assets 14`
+  — `FRONTEND_BUNDLE_BUDGET_OK`.
+- `docker compose exec -T backend ruff check app tests` — green.
+
+## P82 — Admin route native add-species button
+
+- [x] Убрать последний direct Element Plus control из `AdminView.vue`:
+  - заменить `el-button` “Добавить вид” на native button;
+  - сохранить прежний `openAddSpecies` flow;
+  - добавить локальные hover/focus styles.
+- [x] Оставить Element Plus внутри lazy admin-компонентов:
+  - таблицы, формы, upload и диалоги остаются там, где они действительно
+    нужны;
+  - стартовый `AdminView` больше не предзагружает `el-button`.
+
+Ожидаемый эффект:
+- direct Element Plus controls исчезли из всех route-level views;
+- admin route deps больше не содержат `el-button` chunk;
+- тяжелые admin controls остаются lazy-loaded по вкладкам/диалогам.
+
+Риски:
+- визуальное отличие native admin button от Element Plus должно удерживаться
+  локальным CSS;
+- следующий крупный выигрыш в admin route уже потребует разбирать eager
+  composable/dependency graph, а не просто менять одну кнопку.
+
+Критерии готовности:
+- `frontend/src/views/*.vue` не содержит прямых `<el-...>` controls;
+- route map для `admin` не содержит `el-button`;
+- frontend unit tests, production build и bundle budget проходят.
+
+### Проверки P82
+
+- `rg -n "<el-(button|input|checkbox|select|option|tag|dialog)" frontend/src/views -g '*.vue'`
+  — прямых использований не найдено.
+- `npm run test:unit` — `50 passed`.
+- `npm run build` — ok; `AdminView-YFQqJcL4.js 33.89 KB`, gzip
+  `11.93 KB`; отдельный `el-button` JS/CSS chunk больше не появляется.
+- `python3 scripts/frontend_bundle_budget.py --assets-dir frontend/dist/assets --top-assets 14`
+  — `FRONTEND_BUNDLE_BUDGET_OK`; `AdminView-YFQqJcL4.js 33.95 KB /
+  budget 58.59 KB`.
+- route map check — route-level deps для `admin` содержат только `AdminView`,
+  `client`, shared `index` и CSS; form/dialog/table chunks остаются lazy.
+
+## P83 — Lightweight admin toast dependency
+
+- [x] Убрать eager `ElMessage` imports из admin composables:
+  - `useAdminSpeciesCatalog`;
+  - `useAdminCatalogQuality`;
+  - `useAdminCatalogImport`;
+  - `useAdminAuditOps`.
+- [x] Добавить общий lightweight `adminMessages` helper:
+  - default messages используют маленький DOM-notifier без Element Plus;
+  - тесты composables по-прежнему инжектят fake messages и не зависят от UI
+    библиотеки.
+
+Ожидаемый эффект:
+- `AdminView` больше не тянет `ElMessage`/Element Plus message stack при
+  первом открытии route;
+- route-level deps для `admin` сократились до `AdminView`, `client`, shared
+  `index` и CSS;
+- `AdminView` уменьшился примерно с `33.9 KB` raw до `27.2 KB` raw без
+  появления большого lazy chunk для всего Element Plus.
+
+Риски:
+- helper должен оставаться простым: без бизнес-логики и без синхронных
+  ожиданий результата notification.
+- визуальная консистентность toast-ов теперь поддерживается локальным CSS
+  внутри helper.
+
+Критерии готовности:
+- admin composables не импортируют `ElMessage` напрямую;
+- unit tests composables проходят;
+- route map для `admin` не содержит `dayjs.min`/Element Plus chunks в
+  initial deps;
+- production build и bundle budget проходят.
+
+### Проверки P83
+
+- `rg -n "import \\{ ElMessage|ElMessage|import\\('element-plus" frontend/src/composables/admin frontend/src/views -g '*.ts' -g '*.vue'`
+  — прямых обращений к Element Plus message не найдено.
+- `npm run test:unit` — `50 passed`.
+- `npm run build` — ok; `AdminView-C19squfN.js 27.17 KB`, gzip `9.33 KB`.
+- `python3 scripts/frontend_bundle_budget.py --assets-dir frontend/dist/assets --top-assets 18`
+  — `FRONTEND_BUNDLE_BUDGET_OK`; `AdminView-C19squfN.js 27.38 KB /
+  budget 58.59 KB`.
+- route map check:
+  - `login`: `LoginView`, shared `index`, `userInitials`, CSS;
+  - `expert-queue`: `ExpertQueueView`, `client`, shared `index`, CSS;
+  - `admin`: `AdminView`, `client`, shared `index`, CSS.
+
+## P84 — Lazy audit tab orchestration
+
+- [x] Вынести orchestration вкладки аудита из `AdminView` в отдельный lazy
+  container `AdminAuditTab`:
+  - audit state и API handlers живут рядом с `AdminAuditPanel`;
+  - `AdminView` больше не импортирует `useAdminAuditOps`;
+  - открытие вкладки “Аудит” загружает audit container отдельно.
+- [x] Сохранить refresh после импорта зон:
+  - `AdminView` чистит audit/ops cache;
+  - если открыта вкладка аудита, меняет `auditRefreshKey`;
+  - `AdminAuditTab` реагирует на ключ и перезагружает ops/audit.
+- [x] Ужесточить bundle budget:
+  - `AdminView-*.js` теперь ограничен `28_000` bytes;
+  - добавлен regression test на этот ceiling.
+
+Ожидаемый эффект:
+- стартовый admin route больше не создаёт audit/ops reactive state;
+- audit table, pagination и audit API orchestration уходят в отдельный lazy
+  chunk;
+- `AdminView` снизился примерно с `27.17 KB` до `22.80 KB` raw.
+
+Риски:
+- первый вход во вкладку “Аудит” получает lazy-load overhead;
+- refresh через `auditRefreshKey` нужно сохранять при будущих parent/child
+  refactors;
+- если появится глубокая ссылка на конкретную вкладку, нужно синхронизировать
+  lazy mount с route query.
+
+Критерии готовности:
+- `AdminView` не импортирует `useAdminAuditOps`;
+- route-level deps для `admin` содержат только `AdminView`, `client`, shared
+  `index` и CSS;
+- `AdminView-*.js` проходит бюджет `28_000` bytes;
+- frontend unit tests и production build проходят.
+
+### Проверки P84
+
+- `test_default_admin_bundle_budget_tracks_lazy_route_shell` сначала падал:
+  `assert 60000 <= 28000`.
+- После refactor и ужесточения budget:
+  `.venv/bin/python -m pytest -q tests/test_frontend_bundle_budget_script.py::test_default_admin_bundle_budget_tracks_lazy_route_shell`
+  — `1 passed`.
+- `npm run test:unit` — `50 passed`.
+- `npm run build` — ok; `AdminView-Bmq_3MMf.js 22.80 KB`, gzip
+  `8.06 KB`; `AdminAuditTab-3Q9O2RVU.js 21.18 KB`, gzip `7.84 KB`.
+- `python3 scripts/frontend_bundle_budget.py --assets-dir frontend/dist/assets --top-assets 18`
+  — `FRONTEND_BUNDLE_BUDGET_OK`; `AdminView-Bmq_3MMf.js 22.94 KB /
+  budget 27.34 KB`.
+- route map check — `admin` deps: `AdminView`, `client`, shared `index`,
+  `AdminView.css`.
+- `docker compose exec -T backend pytest -q` — `166 passed, 8 skipped`.
+- `docker compose exec -T backend ruff check app tests` — green.
+- `git diff --check` — clean.
+
+## P85 — Lazy species catalog tab orchestration
+
+- [x] Вынести вкладку “Виды” из `AdminView` в отдельный lazy container
+  `AdminSpeciesTab`:
+  - catalog quality state и exports;
+  - species table state, filters, URL sync и CRUD handlers;
+  - CSV import preview/apply/rollback state;
+  - species add/edit dialogs.
+- [x] Оставить `AdminView` shell-only:
+  - tabs;
+  - lazy `AdminSpeciesTab`, `AdminAuditTab`, `AdminRolesPanel`,
+    `AdminZoneImportPanel`;
+  - zone upload message и audit refresh key.
+- [x] Ужесточить `AdminView-*.js` budget до `8_000` bytes и обновить
+  regression test.
+
+Ожидаемый эффект:
+- стартовый admin route больше не создаёт species/catalog/import reactive
+  state и не импортирует три catalog composables;
+- route-level `AdminView` стал маленьким shell chunk;
+- `AdminView` снизился примерно с `22.80 KB` до `3.14 KB` raw.
+
+Риски:
+- первый вход во вкладку “Виды” получает lazy-load overhead;
+- URL sync фильтров видов теперь живёт внутри `AdminSpeciesTab`, поэтому
+  будущие deep links нужно держать рядом с этим container;
+- dialog state добавления/редактирования теперь уничтожается при уходе со
+  вкладки, что ожидаемо для lazy tab, но важно помнить при будущих UX-правках.
+
+Критерии готовности:
+- `AdminView` не импортирует catalog/species/import composables;
+- route-level deps для `admin` содержат только shell, `client`, shared `index`
+  и CSS;
+- `AdminView-*.js` проходит бюджет `8_000` bytes;
+- frontend unit tests, production build и bundle budget проходят.
+
+### Проверки P85
+
+- `test_default_admin_bundle_budget_tracks_lazy_route_shell` сначала падал:
+  `assert 28000 <= 18000`.
+- После refactor и ужесточения budget:
+  `.venv/bin/python -m pytest -q tests/test_frontend_bundle_budget_script.py tests/test_perf_smoke_ci_script.py`
+  — `8 passed`.
+- `npm run test:unit` — `50 passed`.
+- `npm run build` — ok; `AdminView-CsJ9hJ7T.js 3.14 KB`, gzip
+  `1.55 KB`; `AdminSpeciesTab-90TYOeiL.js 19.28 KB`, gzip `6.73 KB`.
+- `python3 scripts/frontend_bundle_budget.py --assets-dir frontend/dist/assets --top-assets 18`
+  — `FRONTEND_BUNDLE_BUDGET_OK`; `AdminView-CsJ9hJ7T.js 3.14 KB /
+  budget 7.81 KB`.
+- route map check — `admin` deps: `AdminView`, `client`, shared `index`,
+  `AdminView.css`.
+- `docker compose exec -T backend pytest -q` — `166 passed, 8 skipped`.
+- `docker compose exec -T backend ruff check app tests` — green.
+- `git diff --check` — clean.
+
+## P86 — Lazy admin tab bundle budgets
+
+- [x] Добавить default budgets для новых lazy admin chunks:
+  - `AdminSpeciesTab-*.js` — `22_000` bytes;
+  - `AdminAuditTab-*.js` — `16_000` bytes.
+- [x] Расширить regression tests:
+  - default budget coverage теперь проверяет admin shell и lazy admin tabs;
+  - отдельный test фиксирует ceiling для split chunks.
+
+Ожидаемый эффект:
+- gains P84/P85 закреплены автоматической проверкой;
+- будущие изменения во вкладках “Виды” и “Аудит” не смогут незаметно
+  раздуть lazy chunks;
+- bundle report стал точнее показывать, где растёт admin UI.
+
+Риски:
+- budgets для lazy вкладок достаточно плотные, поэтому крупные UX-фичи
+  потребуют либо дополнительного split, либо осознанного изменения потолка;
+- если Vite переименует chunks после существенного refactor, patterns нужно
+  обновить вместе с архитектурой.
+
+Критерии готовности:
+- `DEFAULT_BUDGETS` содержит `AdminSpeciesTab-*.js` и `AdminAuditTab-*.js`;
+- script tests проходят локально без DB;
+- bundle budget проходит на свежем `frontend/dist`.
+
+### Проверки P86
+
+- `test_default_admin_lazy_tab_budgets_track_split_chunks` сначала падал:
+  `KeyError: 'AdminSpeciesTab-*.js'`.
+- После добавления budgets:
+  `.venv/bin/python -m pytest -q tests/test_frontend_bundle_budget_script.py tests/test_perf_smoke_ci_script.py`
+  — `9 passed`.
+- `python3 -m py_compile scripts/frontend_bundle_budget.py` — ok.
+- `python3 scripts/frontend_bundle_budget.py --assets-dir frontend/dist/assets --top-assets 20`
+  — `FRONTEND_BUNDLE_BUDGET_OK`;
+  `AdminView-CsJ9hJ7T.js 3.14 KB / budget 7.81 KB`;
+  `AdminSpeciesTab-90TYOeiL.js 19.42 KB / budget 21.48 KB`;
+  `AdminAuditTab-Cpg4ApXZ.js 21.16 KB / budget 23.44 KB`
+  (позднее ужат в P87 до `16_000` bytes).
+- `docker compose exec -T backend pytest -q` — `166 passed, 9 skipped`.
+- `docker compose exec -T backend ruff check app tests` — green.
+- `git diff --check` — clean.
+
+## P87 — Audit tab native controls
+
+- [x] Перевести lightweight controls в `AdminAuditPanel` на native UI:
+  - кнопки обновления сводки/журнала;
+  - text filters `action`, `target_type`, `actor_user_id`, `request_id`;
+  - retention days number input;
+  - purge/reset/apply buttons.
+- [x] Оставить Element Plus там, где он пока оправдан:
+  - audit table;
+  - pagination;
+  - loading directive.
+- [x] Ужесточить `AdminAuditTab-*.js` budget с `24_000` до `16_000`
+  bytes.
+
+Ожидаемый эффект:
+- lazy chunk аудита не тянет form/button/input-number controls;
+- `AdminAuditTab` снизился примерно с `21.16 KB` до `14.01 KB` raw;
+- первый вход во вкладку “Аудит” стал легче, при этом таблица осталась
+  функционально прежней.
+
+Риски:
+- native controls выглядят проще Element Plus, поэтому focus/disabled/loading
+  styles поддерживаются локально;
+- clearable-input UX стал обычным ручным редактированием поля;
+- дальнейшее уменьшение audit chunk уже потребует замены таблицы/пагинации,
+  что имеет больший UX-риск.
+
+Критерии готовности:
+- `AdminAuditPanel.vue` не содержит прямых `el-button`, `el-input`,
+  `el-input-number`;
+- `AdminAuditTab-*.js` проходит бюджет `16_000` bytes;
+- frontend unit tests, production build и bundle budget проходят.
+
+### Проверки P87
+
+- `test_default_admin_lazy_tab_budgets_track_split_chunks` сначала падал:
+  `assert 24000 <= 18000`.
+- `rg -n "<el-(button|input|input-number|select|option)" frontend/src/components/admin/AdminAuditPanel.vue`
+  — прямых lightweight Element Plus controls не найдено.
+- `npm run test:unit` — `50 passed`.
+- `npm run build` — ok; `AdminAuditTab-B9JPYESh.js 14.01 KB`, gzip
+  `5.14 KB`.
+- `.venv/bin/python -m pytest -q tests/test_frontend_bundle_budget_script.py tests/test_perf_smoke_ci_script.py`
+  — `9 passed`.
+- `python3 scripts/frontend_bundle_budget.py --assets-dir frontend/dist/assets --top-assets 20`
+  — `FRONTEND_BUNDLE_BUDGET_OK`;
+  `AdminAuditTab-B9JPYESh.js 14.18 KB / budget 15.62 KB`.
+- `docker compose exec -T backend pytest -q` — `166 passed, 9 skipped`.
+- `docker compose exec -T backend ruff check app tests` — green.
+- `git diff --check` — clean.
+
+## P88 — Secondary admin lazy chunk budgets
+
+- [x] Добавить budgets для тяжёлых secondary chunks:
+  - `AdminSpeciesFormDialog-*.js` — `48_000` bytes;
+  - `AdminCatalogImportPanel-*.js` — `9_000` bytes.
+- [x] Расширить regression tests:
+  - default coverage теперь включает form dialog и import panel;
+  - отдельный test фиксирует потолки для secondary chunks.
+
+Ожидаемый эффект:
+- самые крупные вторичные admin chunks теперь тоже контролируются budget
+  check;
+- дальнейшее разрастание формы вида или CSV import panel будет видно в CI/local
+  smoke до ручного тестирования;
+- это безопасный guard без переписывания формы, таблиц и upload flow.
+
+Риски:
+- `AdminSpeciesFormDialog` остаётся самым крупным app-owned lazy chunk;
+- реальное уменьшение этого chunk потребует отдельной UX-работы по замене
+  Element Plus dialog/form/tabs/select/input controls.
+
+Критерии готовности:
+- `DEFAULT_BUDGETS` содержит secondary admin chunk patterns;
+- script tests проходят локально без DB;
+- bundle budget проходит на свежем `frontend/dist`.
+
+### Проверки P88
+
+- `test_default_admin_secondary_budgets_track_heavy_lazy_chunks` сначала
+  падал: `KeyError: 'AdminSpeciesFormDialog-*.js'`.
+- После добавления budgets:
+  `.venv/bin/python -m pytest -q tests/test_frontend_bundle_budget_script.py tests/test_perf_smoke_ci_script.py`
+  — `10 passed`.
+- `python3 scripts/frontend_bundle_budget.py --assets-dir frontend/dist/assets --top-assets 30`
+  — `FRONTEND_BUNDLE_BUDGET_OK`;
+  `AdminSpeciesFormDialog-CO1DgduS.js 44.91 KB / budget 46.88 KB`;
+  `AdminCatalogImportPanel-BgZpQmR9.js 7.55 KB / budget 8.79 KB`.
+- `docker compose exec -T backend pytest -q` — `166 passed, 10 skipped`.
+- `docker compose exec -T backend ruff check app tests` — green.
+- `git diff --check` — clean.
+
+## P89 — Native species form dialog
+
+- [x] Переписать `AdminSpeciesFormDialog` без Element Plus dialog/form/tabs
+  controls:
+  - native modal через `Teleport`;
+  - native tab buttons для секций “Основное”, “Медиа”, “Описание”,
+    “Среда”, “Фенология”;
+  - native inputs/selects/textarea/checkbox/buttons;
+  - прежние props/events сохранены для `AdminSpeciesTab`.
+- [x] Ужесточить `AdminSpeciesFormDialog-*.js` budget с `48_000` до
+  `12_000` bytes.
+
+Ожидаемый эффект:
+- lazy dialog chunk больше не тянет Element Plus form/select/input/dialog/tabs
+  code;
+- `AdminSpeciesFormDialog` снизился примерно с `44.91 KB` до `8.54 KB` raw;
+- первый клик “Добавить вид” / “Редактировать” во вкладке “Виды” стал легче,
+  а admin shell и вкладка видов не раздуваются этим UI до открытия диалога.
+
+Риски:
+- кастомный modal проще Element Plus по accessibility: focus trap и возврат
+  фокуса стоит проверить вручную перед публичным демо;
+- визуальный стиль формы теперь поддерживается локальным CSS, поэтому будущие
+  поля нужно добавлять в этот native pattern;
+- при расширении справочников групп/категорий нужно синхронизировать options в
+  диалоге с backend/domain rules.
+
+Критерии готовности:
+- `AdminSpeciesFormDialog.vue` не содержит прямых `el-dialog`, `el-form`,
+  `el-tabs`, `el-tab-pane`, `el-form-item`, `el-input`, `el-select`,
+  `el-option`, `el-checkbox`, `el-button`;
+- `AdminSpeciesFormDialog-*.js` проходит бюджет `12_000` bytes;
+- frontend unit tests, production build и bundle budget проходят.
+
+### Проверки P89
+
+- `test_default_admin_secondary_budgets_track_heavy_lazy_chunks` сначала
+  падал: `assert 48000 <= 20000`.
+- `npm run test:unit` — `50 passed`.
+- `npm run build` — ok; `AdminSpeciesFormDialog-COeF_Mr7.js 8.37 KB`,
+  gzip `2.87 KB`.
+- `.venv/bin/python -m pytest -q tests/test_frontend_bundle_budget_script.py tests/test_perf_smoke_ci_script.py`
+  — `10 passed`.
+- `python3 scripts/frontend_bundle_budget.py --assets-dir frontend/dist/assets --top-assets 30`
+  — `FRONTEND_BUNDLE_BUDGET_OK`;
+  `AdminSpeciesFormDialog-COeF_Mr7.js 8.54 KB / budget 11.72 KB`.
+- `rg -n "<el-(dialog|form|tabs|tab-pane|form-item|input|select|option|checkbox|button)" frontend/src/components/admin/AdminSpeciesFormDialog.vue`
+  — прямых Element Plus dialog/form controls не найдено.
+
+## P90 — Native admin species catalog table
+
+- [x] Переписать `AdminSpeciesCatalogTable` на native UI:
+  - поиск, checkbox “С голосом”, reset button;
+  - таблица видов;
+  - кнопки “Править” / “Удалить”;
+  - компактная пагинация.
+- [x] Оставить contract с `AdminSpeciesTab` без изменений:
+  - прежние props;
+  - прежние events;
+  - прежняя фильтрация через общий `adminSpeciesFilters`.
+- [x] Добавить source guard, который запрещает возвращение прямых `el-*` и
+  `v-loading` в `AdminSpeciesCatalogTable`.
+- [x] Добавить budget для `AdminSpeciesCatalogTable-*.js` — `7_000` bytes.
+
+Ожидаемый эффект:
+- список видов больше не грузит Element Plus table/input/button/pagination code
+  через свой компонент;
+- собственный table chunk остаётся небольшим: `6.45 KB` raw при лимите
+  `6.84 KB`;
+- первый рабочий сценарий во вкладке “Виды” стал менее зависим от тяжёлых
+  Element Plus controls.
+
+Риски:
+- native table проще Element Plus table: нет встроенных resize/advanced table
+  возможностей;
+- пагинация стала компактной собственной реализацией, поэтому её надо руками
+  проверять на маленьком экране;
+- общий Element Plus table chunk пока остаётся в сборке из-за audit/import/quality
+  таблиц.
+
+Критерии готовности:
+- `AdminSpeciesCatalogTable.vue` не содержит `<el-*` и `v-loading`;
+- `AdminSpeciesCatalogTable-*.js` проходит бюджет `7_000` bytes;
+- frontend unit tests, production build, source guards и bundle budget проходят.
+
+### Проверки P90
+
+- `test_default_admin_lazy_tab_budgets_track_split_chunks` сначала падал:
+  `KeyError: 'AdminSpeciesCatalogTable-*.js'`.
+- `.venv/bin/python -m pytest -q tests/test_frontend_source_guards.py tests/test_frontend_bundle_budget_script.py tests/test_perf_smoke_ci_script.py`
+  — `12 passed`.
+- `npm run test:unit` — `50 passed`.
+- `npm run build` — ok; `AdminSpeciesCatalogTable-BbUqQVdL.js 6.17 KB`,
+  gzip `2.49 KB`.
+- `python3 scripts/frontend_bundle_budget.py --assets-dir frontend/dist/assets --top-assets 30`
+  — `FRONTEND_BUNDLE_BUDGET_OK`;
+  `AdminSpeciesCatalogTable-BbUqQVdL.js 6.45 KB / budget 6.84 KB`.
+
+## P91 — Lazy CSV import panel in species admin
+
+- [x] Спрятать `AdminCatalogImportPanel` за явную кнопку “Открыть CSV импорт”.
+- [x] Убрать автоматическую загрузку batch history из `onMounted` вкладки
+  “Виды”.
+- [x] Загружать `loadCatalogImportBatches()` только при первом открытии import
+  panel.
+- [x] Добавить source guard, который фиксирует lazy render через
+  `v-if="showCatalogImportPanel"` и запрещает прежний eager call
+  `void loadCatalogImportBatches()`.
+
+Ожидаемый эффект:
+- первый вход во вкладку “Виды” больше не запускает редко нужную batch-history
+  загрузку;
+- async chunk `AdminCatalogImportPanel` остаётся отдельным и не должен
+  загружаться до явного открытия CSV import;
+- рабочий сценарий “найти/исправить вид” меньше конкурирует с CSV import UI и
+  API-запросами.
+
+Риски:
+- CSV import теперь требует дополнительного клика;
+- если пользователь привык видеть историю import сразу, это изменение надо
+  объяснить в UI/инструкции;
+- при ошибке первой загрузки истории повторное открытие panel не перезапускает
+  её автоматически, остаётся кнопка “Обновить”.
+
+Критерии готовности:
+- `AdminCatalogImportPanel` рендерится только при
+  `showCatalogImportPanel === true`;
+- `onMounted` вкладки “Виды” не вызывает `loadCatalogImportBatches()`;
+- source guards, frontend unit tests, production build и bundle budget проходят.
+
+### Проверки P91
+
+- `test_admin_species_tab_defers_catalog_import_panel` сначала падал:
+  `assert 'v-if="showCatalogImportPanel"' in source`.
+- После lazy toggle:
+  `.venv/bin/python -m pytest -q tests/test_frontend_source_guards.py tests/test_frontend_bundle_budget_script.py tests/test_perf_smoke_ci_script.py`
+  — `12 passed`.
+- `npm run test:unit` — `50 passed`.
+- `npm run build` — ok; `AdminSpeciesTab-OBoyP3Fh.js 19.44 KB`, gzip
+  `6.78 KB`; `AdminCatalogImportPanel-C7h5iyRt.js 7.17 KB`, gzip
+  `2.82 KB`.
+- `python3 scripts/frontend_bundle_budget.py --assets-dir frontend/dist/assets --top-assets 30`
+  — `FRONTEND_BUNDLE_BUDGET_OK`;
+  `AdminSpeciesTab-OBoyP3Fh.js 19.65 KB / budget 21.48 KB`;
+  `AdminCatalogImportPanel-C7h5iyRt.js 7.45 KB / budget 8.79 KB`.
+
+## P92 — Native expert queue dialogs
+
+- [x] Переписать `ExpertQueueDialogs` без Element Plus:
+  - native modal через `Teleport`;
+  - native select/search для выбора вида;
+  - native textarea/buttons для confirm/request/reject flows.
+- [x] Сохранить прежний contract с `ExpertQueueView`:
+  - `v-model:confirm-open`;
+  - `v-model:request-open`;
+  - `v-model:reject-open`;
+  - `v-model:action-comment`;
+  - events `confirm`, `request`, `reject`.
+- [x] Добавить source guard против возврата `<el-*`.
+- [x] Добавить budget `ExpertQueueDialogs-*.js` — `7_000` bytes.
+
+Ожидаемый эффект:
+- lazy expert dialog chunk больше не тянет dialog/select/input/button runtime;
+- `ExpertQueueDialogs` снизился примерно с `15.23 KB` до `5.68 KB` raw;
+- первый клик по экспертному действию открывает более лёгкий async chunk.
+
+Риски:
+- native modal проще Element Plus по focus trap / escape UX;
+- filterable select заменён связкой “поиск + select”, её надо проверить руками
+  на длинном списке видов;
+- стили confirm/request/reject теперь локальные.
+
+Критерии готовности:
+- `ExpertQueueDialogs.vue` не содержит `<el-*`;
+- `ExpertQueueDialogs-*.js` проходит бюджет `7_000` bytes;
+- source guards, frontend unit tests, production build и bundle budget проходят.
+
+### Проверки P92
+
+- `test_default_expert_dialog_budget_tracks_lazy_chunk` сначала падал:
+  `KeyError: 'ExpertQueueDialogs-*.js'`.
+- `test_expert_queue_dialogs_stay_native` сначала падал на `<el-dialog`.
+- После native refactor:
+  `.venv/bin/python -m pytest -q tests/test_frontend_bundle_budget_script.py::test_default_expert_dialog_budget_tracks_lazy_chunk tests/test_frontend_source_guards.py::test_expert_queue_dialogs_stay_native`
+  — `2 passed`.
+- `npm run test:unit` — `50 passed`.
+- `npm run build` — ok; `ExpertQueueDialogs-BW5vGQOd.js 5.43 KB`,
+  gzip `1.97 KB`.
+- `python3 scripts/frontend_bundle_budget.py --assets-dir frontend/dist/assets --top-assets 30`
+  — `ExpertQueueDialogs-BW5vGQOd.js 5.68 KB / budget 6.84 KB`.
+
+## P93 — Native catalog quality panel
+
+- [x] Переписать `AdminCatalogQualityPanel` без Element Plus:
+  - native buttons for CSV export/refresh;
+  - native loading overlay;
+  - native candidate table.
+- [x] Добавить source guard против `<el-*` и `v-loading`.
+- [x] Добавить budget `AdminCatalogQualityPanel-*.js` — `5_000` bytes.
+
+Ожидаемый эффект:
+- вкладка “Виды” больше не грузит Element Plus table/button/loading через
+  quality panel;
+- `AdminCatalogQualityPanel` держится на `3.73 KB` raw при budget `4.88 KB`;
+- первый вход в справочник видов стал ближе к полностью native admin path.
+
+Риски:
+- native table проще Element Plus table;
+- loading overlay локальный и требует ручной проверки на длинных списках;
+- при расширении quality candidates нужно поддерживать responsive table вручную.
+
+Критерии готовности:
+- `AdminCatalogQualityPanel.vue` не содержит `<el-*` и `v-loading`;
+- `AdminCatalogQualityPanel-*.js` проходит budget `5_000` bytes;
+- source guards, frontend unit tests, production build и bundle budget проходят.
+
+### Проверки P93
+
+- `test_default_admin_lazy_tab_budgets_track_split_chunks` сначала падал:
+  `KeyError: 'AdminCatalogQualityPanel-*.js'`.
+- `test_admin_catalog_quality_panel_stays_native` сначала падал на `<el-button`.
+- После native refactor:
+  `.venv/bin/python -m pytest -q tests/test_frontend_bundle_budget_script.py::test_default_admin_lazy_tab_budgets_track_split_chunks tests/test_frontend_source_guards.py::test_admin_catalog_quality_panel_stays_native`
+  — `2 passed`.
+- `npm run test:unit` — `50 passed`.
+- `npm run build` — ok; `AdminCatalogQualityPanel-DTCVD5LY.js 3.55 KB`,
+  gzip `1.70 KB`.
+
+## P94 — Native catalog import panel
+
+- [x] Переписать `AdminCatalogImportPanel` без Element Plus:
+  - native file input вместо `el-upload`;
+  - native preview/error/history/detail tables;
+  - native action buttons;
+  - native pagination;
+  - native loading overlay.
+- [x] Сохранить прежний contract с `useAdminCatalogImport`:
+  - event `preview` получает object с `file`;
+  - events `apply`, `refresh-batches`, `status-change`, `page-change`,
+    `load-detail`, `rollback` сохранены.
+- [x] Добавить source guard против `<el-*` и `v-loading`.
+
+Ожидаемый эффект:
+- CSV import chunk перестал концентрировать Element Plus upload/table runtime;
+- после промежуточного regression `25.63 KB / budget 8.79 KB` chunk вернулся
+  в budget: `8.35 KB / budget 8.79 KB`;
+- при открытии CSV import грузится только локальный native UI.
+
+Риски:
+- file input проще `el-upload`: нет встроенного drag UI и upload progress;
+- таблицы истории/деталей стали локальными и требуют ручной проверки на
+  маленьком экране;
+- повторная загрузка того же файла работает через reset input, это надо
+  проверять при regression QA.
+
+Критерии готовности:
+- `AdminCatalogImportPanel.vue` не содержит `<el-*` и `v-loading`;
+- `AdminCatalogImportPanel-*.js` проходит budget `9_000` bytes;
+- source guards, frontend unit tests, production build и bundle budget проходят.
+
+### Проверки P94
+
+- `python3 scripts/frontend_bundle_budget.py --assets-dir frontend/dist/assets --top-assets 30`
+  сначала падал:
+  `AdminCatalogImportPanel-ZGu27xuP.js is 25.63 KB, budget 8.79 KB`.
+- `test_admin_catalog_import_panel_stays_native` сначала падал на `<el-upload`.
+- После native refactor:
+  `.venv/bin/python -m pytest -q tests/test_frontend_source_guards.py::test_admin_catalog_import_panel_stays_native tests/test_frontend_bundle_budget_script.py::test_default_admin_secondary_budgets_track_heavy_lazy_chunks`
+  — `2 passed`.
+- `npm run test:unit` — `50 passed`.
+- `npm run build` — ok; `AdminCatalogImportPanel-BHgn_ZA0.js 8.03 KB`,
+  gzip `3.00 KB`.
+- `python3 scripts/frontend_bundle_budget.py --assets-dir frontend/dist/assets --top-assets 30`
+  — `AdminCatalogImportPanel-BHgn_ZA0.js 8.35 KB / budget 8.79 KB`.
+
+## P95 — Native audit table and ops loading
+
+- [x] Переписать audit table/pagination/loading в `AdminAuditPanel` на native UI.
+- [x] Убрать `v-loading` из `AdminOpsPanel`:
+  - native loading overlay for ops summary;
+  - native loading overlay for ops alerts.
+- [x] Добавить source guards для `AdminAuditPanel` и `AdminOpsPanel`.
+
+Ожидаемый эффект:
+- audit lazy chunk больше не тянет Element Plus table/pagination/loading;
+- промежуточный regression `AdminAuditTab` `220.77 KB / budget 15.62 KB`
+  устранён;
+- итоговый `AdminAuditTab` — `14.90 KB / budget 15.62 KB`.
+
+Риски:
+- native audit table проще Element Plus table: нет встроенных advanced table
+  features;
+- JSON details truncation остался прежним, но overflow/scroll теперь
+  контролируется локальным CSS;
+- ops loading overlays нужно руками проверить при медленном API.
+
+Критерии готовности:
+- `AdminAuditPanel.vue` и `AdminOpsPanel.vue` не содержат `<el-*` и
+  `v-loading`;
+- `AdminAuditTab-*.js` проходит budget `16_000` bytes;
+- source guards, frontend unit tests, production build и bundle budget проходят.
+
+### Проверки P95
+
+- `test_admin_audit_panel_stays_native` сначала падал на `<el-table`.
+- `test_admin_ops_panel_stays_native` сначала падал на `v-loading`.
+- После native refactor:
+  `.venv/bin/python -m pytest -q tests/test_frontend_source_guards.py::test_admin_ops_panel_stays_native tests/test_frontend_source_guards.py::test_admin_audit_panel_stays_native tests/test_frontend_bundle_budget_script.py::test_default_admin_lazy_tab_budgets_track_split_chunks`
+  — `3 passed`.
+- `npm run test:unit` — `50 passed`.
+- `npm run build` — ok; `AdminAuditTab-DPbwnuIt.js 14.66 KB`,
+  gzip `5.23 KB`.
+- `python3 scripts/frontend_bundle_budget.py --assets-dir frontend/dist/assets --top-assets 30`
+  — `AdminAuditTab-DPbwnuIt.js 14.90 KB / budget 15.62 KB`.
+
+## P96 — Native zone import panel
+
+- [x] Переписать `AdminZoneImportPanel` без Element Plus:
+  - native file input;
+  - drag/drop area;
+  - `fetch('/api/admin/zones/import')` with existing auth headers;
+  - прежние events `success` и `error`.
+- [x] Добавить source guard против `<el-*` и `v-loading`.
+- [x] Добавить budget `AdminZoneImportPanel-*.js` — `3_000` bytes.
+
+Ожидаемый эффект:
+- zone import lazy chunk больше не тянет `el-upload`;
+- `AdminZoneImportPanel` снизился примерно с `55.25 KB` до `1.89 KB` raw;
+- общий largest app entry после удаления Element Plus paths снизился примерно
+  до `105.69 KB`.
+
+Риски:
+- native upload не показывает встроенный progress bar;
+- ошибка upload теперь нормализуется в общий `error` event без детального
+  сообщения от backend;
+- drag/drop нужно проверить в браузере отдельно.
+
+Критерии готовности:
+- `AdminZoneImportPanel.vue` не содержит `<el-*` и `v-loading`;
+- `AdminZoneImportPanel-*.js` проходит budget `3_000` bytes;
+- source guards, frontend unit tests, production build и bundle budget проходят.
+
+### Проверки P96
+
+- `test_default_admin_secondary_budgets_track_heavy_lazy_chunks` сначала
+  падал: `KeyError: 'AdminZoneImportPanel-*.js'`.
+- `test_admin_zone_import_panel_stays_native` сначала падал на `<el-upload`.
+- После native refactor:
+  `.venv/bin/python -m pytest -q tests/test_frontend_source_guards.py::test_admin_zone_import_panel_stays_native tests/test_frontend_bundle_budget_script.py::test_default_admin_secondary_budgets_track_heavy_lazy_chunks`
+  — `2 passed`.
+- `npm run test:unit` — `50 passed`.
+- `npm run build` — ok; `AdminZoneImportPanel-3mf1cpSS.js 1.81 KB`,
+  gzip `1.13 KB`.
+- `python3 scripts/frontend_bundle_budget.py --assets-dir frontend/dist/assets --top-assets 30`
+  — `AdminZoneImportPanel-3mf1cpSS.js 1.89 KB / budget 2.93 KB`.
+
+## P97 — Remove unused Element Plus dependency
+
+- [x] Добавить source/package guard: frontend package не должен зависеть от
+  `element-plus`.
+- [x] Удалить `element-plus` из `package.json` и `package-lock.json`.
+- [x] Проверить, что в `frontend/src` нет `<el-*`, `v-loading`,
+  `ElMessage`, `ElMessageBox` и direct imports from `element-plus`.
+
+Ожидаемый эффект:
+- install surface меньше на `20 packages`;
+- меньше риск случайно вернуть тяжёлые Element Plus components без осознанного
+  решения;
+- bundle graph стал предсказуемее: Element Plus chunks исчезли из production
+  build.
+
+Риски:
+- если будущая фича захочет Element Plus, dependency придётся вернуть явно;
+- npm audit всё ещё показывает `9 moderate severity vulnerabilities`, но они
+  относятся к оставшемуся dependency tree и требуют отдельной волны.
+
+Критерии готовности:
+- `package.json` не содержит `element-plus`;
+- source guards проходят;
+- frontend unit tests, production build и bundle budget проходят.
+
+### Проверки P97
+
+- `test_frontend_package_does_not_depend_on_element_plus` сначала падал:
+  `"element-plus" is contained here`.
+- `npm uninstall element-plus` — removed `20 packages`; npm audit сообщает
+  `9 moderate severity vulnerabilities`.
+- После удаления:
+  `.venv/bin/python -m pytest -q tests/test_frontend_source_guards.py tests/test_frontend_bundle_budget_script.py tests/test_perf_smoke_ci_script.py`
+  — `20 passed`.
+- `npm run test:unit` — `50 passed`.
+- `npm run build` — ok.
+- `python3 scripts/frontend_bundle_budget.py --assets-dir frontend/dist/assets --top-assets 30`
+  — `FRONTEND_BUNDLE_BUDGET_OK`; largest app/shared asset
+  `index-2kVQybZt.js 105.69 KB`.
+
+## P98 — Frontend security audit and toolchain upgrade
+
+- [x] Прогнать `npm audit --json` после удаления Element Plus.
+- [x] Применить safe fixes через `npm audit fix`:
+  - `axios`;
+  - `follow-redirects`;
+  - transitives вроде `postcss`.
+- [x] Обновить frontend toolchain до актуальной совместимой линии:
+  - `vite` до `^8.0.10`;
+  - `vitest` до `^4.1.5`;
+  - `@vitest/coverage-v8` до `^4.1.5`;
+  - `@vitejs/plugin-vue` до `^6.0.6`.
+- [x] Убрать больше не нужный `unplugin-vue-components` и
+  `ElementPlusResolver` из `vite.config.ts`.
+- [x] Добавить source guard, запрещающий вернуть `unplugin-vue-components` /
+  `ElementPlusResolver` без явного решения.
+
+Ожидаемый эффект:
+- `npm audit` по frontend даёт `0 vulnerabilities`;
+- dev/build toolchain закрывает Vite/esbuild/Vitest advisory chain;
+- dependency tree меньше после удаления Element Plus и auto-components resolver;
+- Vite 8 сборка стала быстрее на локальном прогоне.
+
+Риски:
+- Vite 8 / Vitest 4 — major upgrades, поэтому нужны unit/build проверки и
+  ручной smoke основных страниц;
+- Vite 8 изменил chunk graph и имена общих чанков;
+- если в будущем понадобится auto-import компонентов, dependency придётся
+  вернуть явно.
+
+Критерии готовности:
+- `npm audit --audit-level=moderate` проходит с `found 0 vulnerabilities`;
+- `vite.config.ts` содержит только нужные plugins;
+- source guards, frontend unit tests, production build и bundle budget проходят.
+
+### Проверки P98
+
+- `npm audit --json` сначала показывал `9 moderate vulnerabilities`.
+- `npm audit fix` закрыл часть зависимостей, осталось `6 moderate` вокруг
+  Vite/Vitest/esbuild.
+- `npm view` подтвердил, что Node `v24.12.0` подходит под Vite `8.0.10`,
+  Vitest `4.1.5` и `@vitejs/plugin-vue` `6.0.6`.
+- `npm install -D vite@^8.0.10 vitest@^4.1.5 @vitest/coverage-v8@^4.1.5 @vitejs/plugin-vue@^6.0.6`
+  — toolchain обновлён; `npm audit` показал `found 0 vulnerabilities`.
+- `test_frontend_vite_config_does_not_use_element_plus_resolver` сначала
+  падал на `"unplugin-vue-components"`.
+- `npm uninstall -D unplugin-vue-components` — removed `18 packages`;
+  `npm audit` — `found 0 vulnerabilities`.
+- `npm run test:unit` на Vitest `4.1.5` — `50 passed`.
+- `npm run test:unit:coverage` на `@vitest/coverage-v8` `4.1.5` —
+  `50 passed`; statements coverage `61.56%`.
+- `npm run build` на Vite `8.0.10` — ok.
+
+## P99 — Shared frontend bundle budgets
+
+- [x] Добавить default budgets для Vite 8 shared chunks:
+  - `_plugin-vue_export-helper-*.js` — `70_000` bytes;
+  - `index-*.js` — `55_000` bytes;
+  - `axios-*.js` — `45_000` bytes.
+- [x] Расширить script tests:
+  - default coverage включает shared runtime/vendor chunks;
+  - отдельный test фиксирует ceilings.
+
+Ожидаемый эффект:
+- рост shared runtime/vendor chunks теперь виден в CI/local smoke;
+- переход на Vite 8 не оставляет крупные shared assets без контроля;
+- route-level budgets дополняются budget guard на общую инфраструктуру.
+
+Риски:
+- `_plugin-vue_export-helper` — имя, выбранное Vite 8; при будущей версии Vite
+  pattern может потребовать корректировки;
+- `index-*.js` pattern берёт largest matching asset, поэтому существенный
+  manual chunking refactor нужно сопровождать обновлением budget semantics;
+- vendor split может измениться при крупных dependency upgrades.
+
+Критерии готовности:
+- `DEFAULT_BUDGETS` содержит shared chunk patterns;
+- script tests проходят локально без DB;
+- bundle budget проходит на свежем `frontend/dist`.
+
+### Проверки P99
+
+- `test_default_shared_bundle_budgets_track_runtime_and_vendor_chunks`
+  сначала падал:
+  `KeyError: '_plugin-vue_export-helper-*.js'`.
+- После добавления budgets:
+  `.venv/bin/python -m pytest -q tests/test_frontend_bundle_budget_script.py`
+  — `10 passed`.
+- `python3 scripts/frontend_bundle_budget.py --assets-dir frontend/dist/assets --top-assets 30`
+  — `FRONTEND_BUNDLE_BUDGET_OK`;
+  `_plugin-vue_export-helper-DUX4ziCp.js 59.65 KB / budget 68.36 KB`;
+  `index-C3NROc4v.js 45.84 KB / budget 53.71 KB`;
+  `axios-DYfdBn8G.js 36.59 KB / budget 43.95 KB`.
+
+## P100 — Browser smoke and local latency close-out
+
+- [x] Синхронизировать зависимости frontend-контейнера после Vite/Vitest
+  upgrade.
+- [x] Перезапустить frontend dev server на Vite `8.0.10`.
+- [x] Пройти ручной smoke в in-app browser:
+  - dev-login под ролью администратора;
+  - админка / справочник видов;
+  - нативный диалог добавления вида;
+  - ленивую CSV-панель;
+  - аудит и операционную сводку;
+  - импорт зон без загрузки файла;
+  - роли;
+  - кабинет эколога в пустой очереди и с подтвержденными наблюдениями.
+- [x] Прогнать local perf-smoke по ключевым API endpoint'ам.
+
+Ожидаемый эффект:
+- подтверждён не только production build, но и текущий docker dev runtime;
+- ленивые админские панели открываются без console errors;
+- ключевые API ручки укладываются в p95/p99 budgets с большим запасом.
+
+Риски:
+- action-модалки эколога (`Подтвердить`, `Запросить данные`, `Отклонить`)
+  не открывались в браузере, потому что очередь новых наблюдений пустая;
+- загрузка GeoJSON не проверялась вручную, чтобы не менять данные без явного
+  тестового файла.
+
+Критерии готовности:
+- `http://localhost:5173/admin` открывается после dev-login администратором;
+- вкладки админки и ленивые панели не дают browser console errors;
+- `scripts/perf_smoke_ci.py --profile local` возвращает `PERF_SMOKE_OK`;
+- после записи P100 нет whitespace issues в diff.
+
+### Проверки P100
+
+- `docker compose exec -T frontend npm install` — зависимости контейнера
+  синхронизированы с lockfile; `found 0 vulnerabilities`.
+- `docker compose restart frontend` — dev server поднялся как
+  `VITE v8.0.10`.
+- Browser smoke:
+  - `/admin` после dev-login показывает профиль `ДМ`;
+  - `Добавить вид` открывает нативный dialog с tablist
+    `Основное` / `Контент` / `Медиа`, закрывается через `Отмена`;
+  - `Открыть CSV импорт` раскрывает `Предпросмотр CSV-правок` и
+    `История CSV-импортов`;
+  - `Аудит`, `Зоны`, `Роли`, `/expert` открываются без console errors.
+- `python3 scripts/perf_smoke_ci.py --profile local --base-url http://127.0.0.1:8000`
+  — `PERF_SMOKE_OK`:
+  - `/api/health`: p95 `9.66 ms`, p99 `10.98 ms`;
+  - `/api/dashboard/summary`: p95 `7.38 ms`, p99 `8.60 ms`;
+  - `/api/gamification/stats?include_heatmap=false`: p95 `6.03 ms`,
+    p99 `6.71 ms`;
+  - `/api/map/observations?...limit=400`: p95 `5.86 ms`, p99 `5.89 ms`.

@@ -26,6 +26,17 @@ engine = create_engine(TEST_DATABASE_URL)
 TestSession = sessionmaker(bind=engine)
 
 
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "no_db: test does not need the database bootstrap fixture",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    config._greenbook_requires_db = any("no_db" not in item.keywords for item in items)
+
+
 def clear_rate_limit_keys() -> None:
     try:
         client = redis.from_url(settings.redis_url)
@@ -52,7 +63,11 @@ def ensure_test_db_exists():
 
 
 @pytest.fixture(scope="session", autouse=True)
-def setup_test_db():
+def setup_test_db(request):
+    if not getattr(request.config, "_greenbook_requires_db", True):
+        yield
+        return
+
     ensure_test_db_exists()
     with engine.connect() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis"))

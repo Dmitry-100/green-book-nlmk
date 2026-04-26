@@ -15,9 +15,9 @@
           </div>
         </div>
       </div>
-      <el-button type="primary" size="large" style="width: 100%; margin-top: 20px" @click="login" :loading="loading">
-        Войти как {{ roles.find(r => r.role === selectedRole)?.label }}
-      </el-button>
+      <button type="button" class="login-submit" :disabled="loading" @click="login">
+        {{ loading ? 'Входим...' : `Войти как ${roles.find(r => r.role === selectedRole)?.label}` }}
+      </button>
       <p class="login-note">В продакшене вход через корпоративный SSO (Blitz Identity Provider)</p>
     </div>
   </div>
@@ -109,5 +109,26 @@ async function login() {
 .role-icon { font-size: 28px; }
 .role-option strong { display: block; font-size: 15px; color: var(--slate-deep); }
 .role-option p { font-size: 12px; color: var(--slate-mid); margin-top: 2px; }
+.login-submit {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 20px;
+  border: 1px solid var(--teal);
+  border-radius: 8px;
+  background: var(--teal);
+  color: white;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.login-submit:hover:not(:disabled) {
+  background: var(--teal-bright);
+  border-color: var(--teal-bright);
+}
+.login-submit:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
 .login-note { text-align: center; font-size: 11px; color: var(--slate-light); margin-top: 16px; }
 </style>

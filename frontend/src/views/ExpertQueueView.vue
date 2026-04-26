@@ -21,80 +21,44 @@
         </div>
 
         <div v-if="activeTab === 'on_review'" class="queue-item__actions">
-          <el-button type="success" size="small" @click="openConfirm(obs)">Подтвердить</el-button>
-          <el-button type="warning" size="small" @click="openRequestData(obs.id)">Запросить данные</el-button>
-          <el-button type="danger" size="small" @click="openReject(obs.id)">Отклонить</el-button>
+          <button type="button" class="queue-action queue-action--success" @click="openConfirm(obs)">
+            Подтвердить
+          </button>
+          <button type="button" class="queue-action queue-action--warning" @click="openRequestData(obs.id)">
+            Запросить данные
+          </button>
+          <button type="button" class="queue-action queue-action--danger" @click="openReject(obs.id)">
+            Отклонить
+          </button>
         </div>
       </div>
     </div>
 
     <div v-if="observations.length === 0 && !loading" class="empty">Очередь пуста</div>
 
-    <!-- Confirm Dialog -->
-    <el-dialog v-model="showConfirmDialog" title="Подтвердить наблюдение" width="460px">
-      <div class="confirm-form">
-        <label>Определённый вид</label>
-        <el-select
-          v-model="confirmForm.species_id"
-          filterable
-          clearable
-          placeholder="Выберите вид"
-          style="width: 100%"
-          :loading="speciesLoading"
-        >
-          <el-option
-            v-for="species in speciesOptions"
-            :key="species.id"
-            :label="`${species.name_ru} (${species.name_latin})`"
-            :value="species.id"
-          />
-        </el-select>
-
-        <label>Чувствительность координат</label>
-        <el-select v-model="confirmForm.sensitive_level" style="width: 100%">
-          <el-option label="Открытые координаты" value="open" />
-          <el-option label="Размытые координаты" value="blurred" />
-          <el-option label="Скрытые координаты" value="hidden" />
-        </el-select>
-
-        <label>Комментарий</label>
-        <el-input
-          v-model="confirmForm.comment"
-          type="textarea"
-          :rows="3"
-          placeholder="Комментарий к решению"
-        />
-        <p v-if="confirmError" class="dialog-error">{{ confirmError }}</p>
-      </div>
-      <template #footer>
-        <el-button @click="showConfirmDialog = false">Отмена</el-button>
-        <el-button type="success" :loading="confirmLoading" @click="confirmSelected">Подтвердить</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- Request Data Dialog -->
-    <el-dialog v-model="showRequestDialog" title="Запросить уточнения" width="400px">
-      <el-input v-model="actionComment" type="textarea" :rows="3" placeholder="Что нужно уточнить?" />
-      <template #footer>
-        <el-button @click="showRequestDialog = false">Отмена</el-button>
-        <el-button type="primary" @click="requestData()">Отправить</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- Reject Dialog -->
-    <el-dialog v-model="showRejectDialog" title="Отклонить наблюдение" width="400px">
-      <el-input v-model="actionComment" type="textarea" :rows="3" placeholder="Причина отклонения" />
-      <template #footer>
-        <el-button @click="showRejectDialog = false">Отмена</el-button>
-        <el-button type="danger" @click="reject()">Отклонить</el-button>
-      </template>
-    </el-dialog>
+    <ExpertQueueDialogs
+      v-if="dialogsLoaded"
+      v-model:confirm-open="showConfirmDialog"
+      v-model:request-open="showRequestDialog"
+      v-model:reject-open="showRejectDialog"
+      v-model:action-comment="actionComment"
+      :confirm-form="confirmForm"
+      :species-options="speciesOptions"
+      :species-loading="speciesLoading"
+      :confirm-loading="confirmLoading"
+      :confirm-error="confirmError"
+      @confirm="confirmSelected"
+      @request="requestData"
+      @reject="reject"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { defineAsyncComponent, reactive, ref, onMounted } from 'vue'
 import api, { getCached } from '../api/client'
+
+const ExpertQueueDialogs = defineAsyncComponent(() => import('../components/expert/ExpertQueueDialogs.vue'))
 
 const observations = ref<any[]>([])
 const loading = ref(false)
@@ -102,6 +66,7 @@ const activeTab = ref('on_review')
 const showConfirmDialog = ref(false)
 const showRequestDialog = ref(false)
 const showRejectDialog = ref(false)
+const dialogsLoaded = ref(false)
 const actionComment = ref('')
 const selectedObsId = ref<number>(0)
 const confirmLoading = ref(false)
@@ -136,6 +101,7 @@ async function fetchQueue() {
 }
 
 async function openConfirm(obs: any) {
+  dialogsLoaded.value = true
   selectedObsId.value = obs.id
   confirmForm.comment = 'Подтверждено'
   confirmForm.sensitive_level = obs.sensitive_level || 'open'
@@ -179,6 +145,7 @@ async function confirmSelected() {
 }
 
 function openRequestData(obsId: number) {
+  dialogsLoaded.value = true
   selectedObsId.value = obsId
   actionComment.value = ''
   showRequestDialog.value = true
@@ -191,6 +158,7 @@ async function requestData() {
 }
 
 function openReject(obsId: number) {
+  dialogsLoaded.value = true
   selectedObsId.value = obsId
   actionComment.value = ''
   showRejectDialog.value = true
@@ -221,8 +189,37 @@ onMounted(fetchQueue)
 .queue-item__info p { font-size: 12px; color: #8FA5AB; margin-top: 2px; }
 .incident-badge { background: rgba(229,57,53,0.1); color: #E53935; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; margin-left: auto; }
 .queue-item__actions { display: flex; gap: 8px; }
+.queue-action {
+  min-height: 28px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #FFFFFF;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.queue-action--success {
+  border-color: rgba(46, 125, 50, 0.28);
+  color: #2E7D32;
+}
+.queue-action--success:hover {
+  background: rgba(76, 175, 80, 0.12);
+}
+.queue-action--warning {
+  border-color: rgba(245, 127, 23, 0.28);
+  color: #A86700;
+}
+.queue-action--warning:hover {
+  background: rgba(255, 193, 7, 0.15);
+}
+.queue-action--danger {
+  border-color: rgba(229, 57, 53, 0.24);
+  color: #C62828;
+}
+.queue-action--danger:hover {
+  background: rgba(229, 57, 53, 0.1);
+}
 .empty { text-align: center; padding: 60px; color: #8FA5AB; font-size: 16px; }
-.confirm-form { display: flex; flex-direction: column; gap: 10px; }
-.confirm-form label { font-size: 13px; font-weight: 600; color: #2C3E4A; }
-.dialog-error { font-size: 12px; color: #E53935; margin-top: 4px; }
 </style>

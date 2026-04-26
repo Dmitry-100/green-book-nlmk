@@ -17,6 +17,7 @@ class PerfCase:
     concurrency: int
     warmup: int
     p95_budget_ms: float
+    p99_budget_ms: float
 
 
 CASES: tuple[PerfCase, ...] = (
@@ -26,6 +27,7 @@ CASES: tuple[PerfCase, ...] = (
         concurrency=8,
         warmup=3,
         p95_budget_ms=200.0,
+        p99_budget_ms=350.0,
     ),
     PerfCase(
         path="/api/dashboard/summary",
@@ -33,6 +35,7 @@ CASES: tuple[PerfCase, ...] = (
         concurrency=12,
         warmup=5,
         p95_budget_ms=700.0,
+        p99_budget_ms=1100.0,
     ),
     PerfCase(
         path="/api/gamification/stats?include_heatmap=false",
@@ -40,6 +43,7 @@ CASES: tuple[PerfCase, ...] = (
         concurrency=12,
         warmup=5,
         p95_budget_ms=900.0,
+        p99_budget_ms=1400.0,
     ),
     PerfCase(
         path="/api/map/observations?bbox=39.45,52.48,39.78,52.72&status=confirmed&limit=400",
@@ -47,8 +51,24 @@ CASES: tuple[PerfCase, ...] = (
         concurrency=12,
         warmup=5,
         p95_budget_ms=1200.0,
+        p99_budget_ms=1800.0,
     ),
 )
+
+
+def _case_for_profile(case: PerfCase, profile: str) -> PerfCase:
+    if profile == "ci":
+        return case
+    if profile == "local":
+        return PerfCase(
+            path=case.path,
+            requests=min(case.requests, 20),
+            concurrency=min(case.concurrency, 4),
+            warmup=min(case.warmup, 2),
+            p95_budget_ms=case.p95_budget_ms,
+            p99_budget_ms=case.p99_budget_ms,
+        )
+    raise ValueError(f"Unsupported perf profile: {profile}")
 
 
 def _percentile(values: list[float], p: float) -> float:
@@ -107,6 +127,8 @@ def _run_case(base_url: str, case: PerfCase, timeout: float) -> tuple[dict, list
 
     avg_ms = statistics.mean(latencies) if latencies else 0.0
     p95_ms = _percentile(latencies, 0.95)
+    p99_ms = _percentile(latencies, 0.99)
+    max_ms = max(latencies) if latencies else 0.0
     throughput = success / elapsed if elapsed > 0 else 0.0
     report = {
         "path": case.path,
@@ -117,6 +139,8 @@ def _run_case(base_url: str, case: PerfCase, timeout: float) -> tuple[dict, list
         "statuses": dict(sorted(statuses.items())),
         "avg_ms": avg_ms,
         "p95_ms": p95_ms,
+        "p99_ms": p99_ms,
+        "max_ms": max_ms,
         "throughput_rps": throughput,
     }
 
@@ -126,6 +150,10 @@ def _run_case(base_url: str, case: PerfCase, timeout: float) -> tuple[dict, list
     if p95_ms > case.p95_budget_ms:
         errors.append(
             f"{case.path}: p95={p95_ms:.2f}ms exceeds budget {case.p95_budget_ms:.2f}ms"
+        )
+    if p99_ms > case.p99_budget_ms:
+        errors.append(
+            f"{case.path}: p99={p99_ms:.2f}ms exceeds budget {case.p99_budget_ms:.2f}ms"
         )
 
     return report, errors
@@ -146,12 +174,23 @@ def main() -> int:
         default=8.0,
         help="Single request timeout in seconds (default: 8.0)",
     )
+    parser.add_argument(
+        "--profile",
+        choices=("ci", "local"),
+        default="ci",
+        help=(
+            "Load profile: ci keeps full thresholds/load, local stays below the "
+            "default dev rate limit (default: ci)"
+        ),
+    )
     args = parser.parse_args()
 
     print(f"BASE_URL: {args.base_url}")
+    print(f"PROFILE: {args.profile}")
     all_errors: list[str] = []
     for case in CASES:
-        report, errors = _run_case(args.base_url, case, args.timeout)
+        active_case = _case_for_profile(case, args.profile)
+        report, errors = _run_case(args.base_url, active_case, args.timeout)
         print(f"PATH: {report['path']}")
         print(
             f"  requests={report['requests']} concurrency={report['concurrency']} "
@@ -160,7 +199,8 @@ def main() -> int:
         print(f"  statuses={report['statuses']}")
         print(
             f"  latency_ms avg={report['avg_ms']:.2f} p95={report['p95_ms']:.2f} "
-            f"budget={case.p95_budget_ms:.2f}"
+            f"p99={report['p99_ms']:.2f} max={report['max_ms']:.2f} "
+            f"budgets_p95_p99={active_case.p95_budget_ms:.2f}/{active_case.p99_budget_ms:.2f}"
         )
         print(f"  throughput_rps={report['throughput_rps']:.2f}")
         all_errors.extend(errors)
