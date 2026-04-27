@@ -5,10 +5,10 @@
       :style="{ backgroundImage: `linear-gradient(to right, rgba(27,77,79,0.92), rgba(27,77,79,0.56), rgba(27,77,79,0.18)), url(${heroImage})` }"
     >
       <div class="exhibition-hero__content">
-        <div class="exhibition-hero__eyebrow">Онлайн-экспозиция</div>
-        <h1>Живая природа промышленной площадки</h1>
+        <div class="exhibition-hero__eyebrow">Фотовыставка 2025</div>
+        <h1>Птицы прудов-отстойников НЛМК</h1>
         <p>
-          Черновая подборка для будущей выставки. Когда появятся архивные материалы и подписи, этот раздел станет витриной лучших наблюдений сотрудников.
+          Работы сотрудников и партнеров о водоемах, тростниковых зарослях, сезонных миграциях и редких встречах на промышленной площадке.
         </p>
       </div>
     </section>
@@ -16,8 +16,8 @@
     <section class="exhibition-section">
       <div class="exhibition-section__header">
         <div>
-          <h2>Первые сюжеты</h2>
-          <p>Временные фотографии из открытых интернет-источников помогают увидеть будущий формат раздела.</p>
+          <h2>Фотоистории</h2>
+          <p>22 фотографии из подборки «Фото птицы НЛМК 2025» с авторскими подписями из выставочного файла.</p>
         </div>
         <router-link to="/observe" class="exhibition-section__action">Добавить наблюдение</router-link>
       </div>
@@ -29,14 +29,15 @@
           class="exhibition-card"
           :class="{ 'exhibition-card--wide': item.wide }"
         >
-          <img :src="item.image" :alt="item.alt" loading="lazy" />
+          <img :src="item.image" :alt="item.alt" loading="lazy" decoding="async" />
           <div class="exhibition-card__body">
-            <div class="exhibition-card__kicker">{{ item.kicker }}</div>
+            <div class="exhibition-card__meta">
+              <span>Фото №{{ item.photoNumber }}</span>
+              <span>{{ item.author }}</span>
+            </div>
             <h3>{{ item.title }}</h3>
             <p>{{ item.description }}</p>
-            <a :href="item.sourceUrl" target="_blank" rel="noreferrer" class="exhibition-card__source">
-              {{ item.sourceLabel }}
-            </a>
+            <div class="exhibition-card__credit">{{ item.credit }}</div>
           </div>
         </article>
       </div>
@@ -44,9 +45,9 @@
 
     <section class="exhibition-note">
       <div>
-        <h2>Следующий шаг</h2>
+        <h2>Пруды как точка притяжения</h2>
         <p>
-          После получения материалов выставки сюда можно перенести реальные фотографии, подписи, авторов, даты наблюдений и ссылки на публикации.
+          Незамерзающие участки, отмели и прибрежные тростники создают условия для зимовок, гнездования и остановок во время миграций.
         </p>
       </div>
       <router-link to="/species" class="exhibition-note__link">К справочнику видов</router-link>
@@ -55,62 +56,10 @@
 </template>
 
 <script setup lang="ts">
-const heroImage = 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1800&q=85'
+import { exhibitionHeroImage, exhibitionPhotos } from '../data/exhibitionBirds2025'
 
-const exhibitionItems = [
-  {
-    id: 1,
-    wide: true,
-    kicker: 'Водные биотопы',
-    title: 'Утренний свет у воды',
-    description: 'Спокойные водоемы становятся точками наблюдений за птицами, земноводными и сезонными миграциями.',
-    image: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1400&q=85',
-    alt: 'Озеро и горный пейзаж в утреннем свете',
-    sourceLabel: 'Unsplash',
-    sourceUrl: 'https://unsplash.com/',
-  },
-  {
-    id: 2,
-    kicker: 'Лесополоса',
-    title: 'Тихие укрытия',
-    description: 'Древесные и кустарниковые зоны дают место для гнездования, кормления и коротких наблюдений по маршруту.',
-    image: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=1000&q=85',
-    alt: 'Лесная тропа среди высоких деревьев',
-    sourceLabel: 'Unsplash',
-    sourceUrl: 'https://unsplash.com/',
-  },
-  {
-    id: 3,
-    kicker: 'Насекомые',
-    title: 'Малые открытия',
-    description: 'Небольшие детали чаще всего становятся первым поводом достать камеру и открыть карточку вида.',
-    image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1000&q=85',
-    alt: 'Солнечный природный пейзаж у берега',
-    sourceLabel: 'Unsplash',
-    sourceUrl: 'https://unsplash.com/',
-  },
-  {
-    id: 4,
-    kicker: 'Сезонные находки',
-    title: 'После дождя',
-    description: 'Грибы, мхи и влажные участки маршрутов хорошо показывают, как быстро меняется природная среда.',
-    image: 'https://images.unsplash.com/photo-1473773508845-188df298d2d1?auto=format&fit=crop&w=1000&q=85',
-    alt: 'Зеленый лесной мох крупным планом',
-    sourceLabel: 'Unsplash',
-    sourceUrl: 'https://unsplash.com/',
-  },
-  {
-    id: 5,
-    wide: true,
-    kicker: 'Панорама площадки',
-    title: 'Природа в рабочем ландшафте',
-    description: 'Будущая выставка поможет собрать лучшие фотографии сотрудников и показать биоразнообразие как часть корпоративной культуры.',
-    image: 'https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?auto=format&fit=crop&w=1400&q=85',
-    alt: 'Лесной массив с высоты',
-    sourceLabel: 'Unsplash',
-    sourceUrl: 'https://unsplash.com/',
-  },
-]
+const heroImage = exhibitionHeroImage
+const exhibitionItems = exhibitionPhotos
 </script>
 
 <style scoped>
@@ -254,7 +203,18 @@ const exhibitionItems = [
   gap: 7px;
 }
 
-.exhibition-card__kicker {
+.exhibition-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.exhibition-card__meta span {
+  display: inline-flex;
+  width: fit-content;
+  border-radius: 6px;
+  background: rgba(42,122,110,0.08);
+  padding: 4px 8px;
   color: var(--teal);
   font-size: 11px;
   font-weight: 800;
@@ -275,16 +235,10 @@ const exhibitionItems = [
   flex: 1;
 }
 
-.exhibition-card__source {
+.exhibition-card__credit {
   color: var(--slate-light);
   font-size: 12px;
   font-weight: 700;
-  text-decoration: none;
-  width: fit-content;
-}
-
-.exhibition-card__source:hover {
-  color: var(--teal);
 }
 
 .exhibition-note {
