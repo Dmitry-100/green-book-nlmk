@@ -275,20 +275,10 @@ async function uploadMedia(observationId: number) {
     if (!mimeType || !ALLOWED_MIME_TYPES.has(mimeType)) {
       throw new Error('Поддерживаются только JPG, PNG и WEBP')
     }
-    const { data } = await api.post('/observations/upload-url', {
-      filename: photo.file.name,
-      content_type: mimeType,
-      file_size: photo.file.size,
-    })
-    const uploadResponse = await fetch(data.upload_url, {
-      method: 'PUT',
-      headers: { 'Content-Type': data.content_type || mimeType },
-      body: photo.file,
-    })
-    if (!uploadResponse.ok) {
-      throw new Error('Не удалось загрузить фото')
-    }
-    mediaPayload.push({ s3_key: data.s3_key, mime_type: mimeType })
+    const formData = new FormData()
+    formData.append('file', photo.file)
+    const { data } = await api.post('/observations/upload', formData)
+    mediaPayload.push({ s3_key: data.s3_key, mime_type: data.content_type || mimeType })
   }
 
   if (mediaPayload.length > 0) {

@@ -80,9 +80,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../api/client'
+import {
+  resolveObservationMediaPreviewUrl,
+  revokeObservationMediaPreviewUrl,
+} from '../services/observationMedia'
 
 const route = useRoute()
 const obs = ref<any>(null)
@@ -93,6 +97,7 @@ const newComment = ref('')
 const likeCount = ref(0)
 const myLiked = ref(false)
 const photoUrl = ref('')
+const photoObjectUrl = ref('')
 
 const groupIcons: Record<string, string> = { plants: '🌿', fungi: '🍄', insects: '🐛', herpetofauna: '🐍', birds: '🐦', mammals: '🦔' }
 const groupLabels: Record<string, string> = { plants: 'Растение', fungi: 'Гриб', insects: 'Насекомое', herpetofauna: 'Герпетофауна', birds: 'Птица', mammals: 'Млекопитающее' }
@@ -132,6 +137,29 @@ async function toggleLike() {
   } catch {}
 }
 
+function releasePhotoObjectUrl() {
+  revokeObservationMediaPreviewUrl(photoObjectUrl.value)
+  photoObjectUrl.value = ''
+}
+
+async function setObservationPhotoUrl(data: any) {
+  releasePhotoObjectUrl()
+  photoUrl.value = ''
+  const mediaKey = data.media?.[0]?.s3_key
+  if (!mediaKey) return
+
+  try {
+    const previewUrl = await resolveObservationMediaPreviewUrl({
+      s3Key: mediaKey,
+      status: data.status,
+    })
+    photoUrl.value = previewUrl
+    if (previewUrl.startsWith('blob:')) {
+      photoObjectUrl.value = previewUrl
+    }
+  } catch {}
+}
+
 async function submitComment() {
   if (!newComment.value.trim()) return
   try {
@@ -152,10 +180,7 @@ onMounted(async () => {
         speciesName.value = sp.data.name_ru
       } catch {}
     }
-    // Photo from media
-    if (data.media?.length) {
-      photoUrl.value = `/api/media/${data.media[0].s3_key}`
-    }
+    await setObservationPhotoUrl(data)
   } catch {}
   fetchComments()
   fetchLikes()
@@ -181,6 +206,8 @@ onMounted(async () => {
     } catch {}
   }
 })
+
+onUnmounted(releasePhotoObjectUrl)
 </script>
 
 <style scoped>

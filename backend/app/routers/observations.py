@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from geoalchemy2.elements import WKTElement
 from pydantic import BaseModel as PydanticBaseModel, Field
 from sqlalchemy.orm import Session, selectinload
@@ -31,6 +31,7 @@ from app.services.media import (
     create_thumbnail_from_image,
     generate_upload_url,
     optimize_image_object,
+    store_uploaded_file,
     validate_uploaded_object,
 )
 
@@ -289,6 +290,25 @@ def update_observation(
     if obs.status in (ObservationStatus.on_review, ObservationStatus.needs_data):
         _invalidate_validation_queue_cache()
     return obs
+
+
+@router.post("/upload")
+async def upload_media_file(
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+):
+    del user  # Authentication is required; uploaded file ownership is attached later.
+    payload = await file.read()
+    try:
+        return store_uploaded_file(
+            file.filename or "upload",
+            file.content_type or "",
+            payload,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @router.post("/upload-url", response_model=UploadUrlResponse)
