@@ -94,3 +94,32 @@ def test_existing_dev_user_display_name_is_aligned_with_token(client, db, monkey
 
     assert response.status_code == 200
     assert response.json()["display_name"] == "Дмитрий Максимович Сотников"
+
+
+def test_dev_user_can_reenter_with_same_email_and_new_role(client, db, monkeypatch):
+    monkeypatch.setattr(settings, "app_env", "development")
+    user = User(
+        external_id="dev-employee-role-switch",
+        display_name="Тест Переключение Роли",
+        email="role-switch@nlmk.dev",
+        role=UserRole.employee,
+    )
+    db.add(user)
+    db.commit()
+
+    token = make_token(
+        external_id="dev-ecologist-role-switch",
+        name="Тест Переключение Роли",
+        email="role-switch@nlmk.dev",
+        role="ecologist",
+    )
+
+    response = client.get(
+        "/api/notifications/unread-count",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    db.refresh(user)
+    assert user.external_id == "dev-ecologist-role-switch"
+    assert user.role == UserRole.ecologist

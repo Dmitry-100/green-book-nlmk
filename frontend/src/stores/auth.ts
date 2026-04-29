@@ -22,6 +22,13 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.setItem('auth_user', JSON.stringify(u))
   }
 
+  function clearSession() {
+    token.value = null
+    user.value = null
+    localStorage.removeItem('auth_token')
+    localStorage.removeItem('auth_user')
+  }
+
   function isEcologist() {
     return user.value?.role === 'ecologist' || user.value?.role === 'admin'
   }
@@ -30,5 +37,5 @@ export const useAuthStore = defineStore('auth', () => {
     return user.value?.role === 'admin'
   }
 
-  return { token, user, setToken, setUser, isEcologist, isAdmin }
+  return { token, user, setToken, setUser, clearSession, isEcologist, isAdmin }
 })

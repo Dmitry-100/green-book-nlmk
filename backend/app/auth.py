@@ -59,14 +59,24 @@ def _normalize_dev_display_name(value: str | None) -> str | None:
 
 def _get_or_create_user(payload: dict, db: Session) -> User:
     external_id = payload["sub"]
+    should_align_dev_identity = settings.app_env in {"development", "test"}
+    claimed_email = payload.get("email")
     user = db.query(User).filter(User.external_id == external_id).first()
+
+    if (
+        user is None
+        and should_align_dev_identity
+        and isinstance(claimed_email, str)
+        and claimed_email
+    ):
+        user = db.query(User).filter(User.email == claimed_email).first()
 
     if user is None:
         role = _resolve_role(payload, fallback=UserRole.employee)
         user = User(
             external_id=external_id,
             display_name=payload.get("name", "Unknown"),
-            email=payload.get("email", f"{external_id}@nlmk.com"),
+            email=claimed_email or f"{external_id}@nlmk.com",
             role=role,
         )
         db.add(user)
@@ -77,12 +87,13 @@ def _get_or_create_user(payload: dict, db: Session) -> User:
     # In development we keep DB identity aligned with selected dev token.
     desired_role = _resolve_role(payload, fallback=user.role)
     claimed_name = payload.get("name")
-    claimed_email = payload.get("email")
-    should_align_dev_identity = settings.app_env in {"development", "test"}
     changed = False
     if should_align_dev_identity and isinstance(claimed_name, str):
         claimed_name = _normalize_dev_display_name(claimed_name)
 
+    if should_align_dev_identity and user.external_id != external_id:
+        user.external_id = external_id
+        changed = True
     if desired_role != user.role:
         user.role = desired_role
         changed = True

@@ -18,6 +18,9 @@
           </svg>
           <span v-if="unreadCount > 0" class="badge">{{ unreadCount }}</span>
         </div>
+        <button v-if="auth.token" type="button" class="role-switch-button" @click="changeRole">
+          Сменить роль
+        </button>
         <div class="user-avatar" @click="$router.push('/profile')" style="cursor:pointer" title="Мой профиль">{{ userInitials }}</div>
       </div>
     </nav>
@@ -45,11 +48,14 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import api from '../api/client'
 import { buildUserInitials, normalizeDemoDisplayName } from '../utils/userInitials'
 
 const auth = useAuthStore()
+const route = useRoute()
+const router = useRouter()
 const unreadCount = ref(0)
 const userInitials = computed(() => buildUserInitials(normalizeDemoDisplayName(auth.user?.displayName), 'ДМ'))
 let pollTimer: number | null = null
@@ -85,6 +91,14 @@ async function fetchUnreadCount(force = false) {
   await unreadRequest
 }
 
+function changeRole() {
+  const redirect = route.name === 'login' ? '/' : route.fullPath || '/'
+  auth.clearSession()
+  unreadCount.value = 0
+  lastUnreadFetchAt = 0
+  router.push({ name: 'login', query: { redirect } })
+}
+
 onMounted(async () => {
   await fetchUnreadCount(true)
   pollTimer = window.setInterval(fetchUnreadCount, 30000)
@@ -108,5 +122,32 @@ watch(
 .portal-nav__links .disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+.role-switch-button {
+  min-height: 32px;
+  border: 1px solid rgba(250, 251, 252, 0.34);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: rgba(250, 251, 252, 0.08);
+  color: var(--slate-pale);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+  white-space: nowrap;
+}
+
+.role-switch-button:hover {
+  background: rgba(250, 251, 252, 0.14);
+  border-color: rgba(250, 251, 252, 0.55);
+}
+
+@media (max-width: 768px) {
+  .role-switch-button {
+    padding: 0 10px;
+    font-size: 11px;
+  }
 }
 </style>
