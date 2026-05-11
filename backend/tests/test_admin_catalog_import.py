@@ -6,7 +6,7 @@ def _csv_payload(rows: list[str]) -> str:
     header = (
         "id,name_ru,name_latin,group,category,conservation_status,is_poisonous,"
         "photo_urls,audio_url,audio_title,audio_source,audio_license,"
-        "season_info,biotopes,description,do_dont_rules\n"
+        "season_info,biotopes,description,do_dont_rules,interesting_facts\n"
     )
     return header + "\n".join(rows) + "\n"
 
@@ -106,6 +106,54 @@ def test_admin_catalog_import_preview_reports_changes_without_mutating_db(
     assert species.conservation_status is None
     assert species.is_poisonous is False
     assert species.photo_urls is None
+
+
+def test_admin_catalog_import_preview_accepts_interesting_facts(client, db, admin_token):
+    species = Species(
+        name_ru="Preview facts bird",
+        name_latin="Parus",
+        group=SpeciesGroup.birds,
+        category=SpeciesCategory.typical,
+        interesting_facts=["Старый факт."],
+    )
+    db.add(species)
+    db.commit()
+    db.refresh(species)
+
+    response = client.post(
+        "/api/admin/catalog/import/preview",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        files={
+            "file": (
+                "catalog.csv",
+                _csv_payload(
+                    [
+                        (
+                            f"{species.id},Preview facts bird,Parus,birds,typical,"
+                            "Обычный вид,false,,,,,,,,,,"
+                            "Первый новый факт.;Второй новый факт."
+                        ),
+                    ]
+                ),
+                "text/csv",
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["error_rows"] == 0
+    assert payload["changes"][0]["changed_fields"] == [
+        "conservation_status",
+        "interesting_facts",
+    ]
+    assert payload["changes"][0]["after"]["interesting_facts"] == [
+        "Первый новый факт.",
+        "Второй новый факт.",
+    ]
+
+    db.refresh(species)
+    assert species.interesting_facts == ["Старый факт."]
 
 
 def test_admin_catalog_import_preview_reports_row_errors(client, db, admin_token):

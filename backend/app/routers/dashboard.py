@@ -13,6 +13,7 @@ from app.models.observation import Observation, ObservationStatus
 from app.models.species import Species
 from app.models.user import User, UserRole
 from app.services.cache import KeyedTTLCache, RedisKeyedTTLCache
+from app.services.fact_of_day import build_fact_of_day
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 _DASHBOARD_SUMMARY_MEMORY_CACHE = KeyedTTLCache[str, dict](
@@ -27,36 +28,6 @@ _DASHBOARD_SUMMARY_CACHE = RedisKeyedTTLCache[str, dict](
     enabled=settings.redis_cache_enabled,
     namespace=settings.redis_cache_namespace,
 )
-
-
-def _build_fact_of_day(db: Session) -> dict | None:
-    eligible_species_query = (
-        db.query(Species)
-        .filter(
-            Species.description.is_not(None),
-            Species.description != "",
-        )
-        .order_by(Species.id.asc())
-    )
-    eligible_count = eligible_species_query.count()
-    if eligible_count == 0:
-        return None
-
-    now = datetime.now(timezone.utc)
-    day_index = now.timetuple().tm_yday % eligible_count
-    fact_species = eligible_species_query.offset(day_index).limit(1).first()
-    if fact_species is None:
-        return None
-
-    return {
-        "species_id": fact_species.id,
-        "name_ru": fact_species.name_ru,
-        "name_latin": fact_species.name_latin,
-        "description": fact_species.description,
-        "photo_url": fact_species.photo_urls[0] if fact_species.photo_urls else None,
-        "is_poisonous": fact_species.is_poisonous,
-        "conservation_status": fact_species.conservation_status,
-    }
 
 
 def _build_monthly_challenge(db: Session) -> dict | None:
@@ -246,7 +217,7 @@ def _build_summary_payload(db: Session) -> dict:
         "species_by_group": species_by_group,
         "recent_species": recent_species,
         "recent_observations": recent_observations,
-        "fact_of_day": _build_fact_of_day(db),
+        "fact_of_day": build_fact_of_day(db),
         "challenge": _build_monthly_challenge(db),
         "community": _build_community_payload(db),
     }

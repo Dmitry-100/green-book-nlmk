@@ -98,6 +98,7 @@ def test_admin_catalog_quality_returns_review_candidates(client, db, admin_token
         "missing_description": 1,
         "missing_audio": 1,
         "short_description": 1,
+        "missing_facts": 3,
     }
     assert payload["latin_name_needs_review_examples"] == [
         {
@@ -131,6 +132,7 @@ def test_admin_catalog_export_returns_needs_review_csv(client, db, admin_token):
         category=SpeciesCategory.typical,
         photo_urls=["https://example.com/bird.jpg"],
         audio_url="https://example.com/bird.mp3",
+        interesting_facts=["Факт для полной карточки."],
     )
     genus_plant = Species(
         name_ru="Export genus plant",
@@ -180,6 +182,7 @@ def test_admin_catalog_export_returns_needs_review_csv(client, db, admin_token):
             "audio_title": "",
             "audio_source": "",
             "audio_license": "",
+            "interesting_facts": "",
         }
     ]
 
@@ -259,6 +262,16 @@ def test_admin_catalog_export_returns_quality_gap_csv(client, db, admin_token):
         csv.DictReader(io.StringIO(short_response.text.lstrip("\ufeff")))
     )
     assert [row["id"] for row in short_rows] == [str(short_description.id)]
+
+    missing_facts_response = client.get(
+        "/api/admin/catalog/export?quality_gap=missing_facts",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+
+    assert missing_facts_response.status_code == 200
+    assert "species-catalog-missing-facts.csv" in missing_facts_response.headers[
+        "content-disposition"
+    ]
 
 
 def test_admin_catalog_export_rejects_unknown_quality_gap(client, admin_token):
@@ -366,6 +379,7 @@ def test_admin_ops_summary_returns_expected_sections(client, db, admin_token):
         "missing_description": 4,
         "missing_audio": 4,
         "short_description": 0,
+        "missing_facts": 4,
     }
     example = payload["catalog"]["latin_name_needs_review_examples"][0]
     assert example["id"] > 0

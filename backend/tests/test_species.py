@@ -64,6 +64,9 @@ def test_list_species_with_quality_gap_filters(client, db):
                 "пользователю понять признаки, местообитания и сезонность."
             ),
             audio_url="/api/media/species-audio/parus-major.ogg",
+            interesting_facts=[
+                "Большая синица умеет менять репертуар сигналов в зависимости от ситуации."
+            ],
         )
     )
     db.add(
@@ -128,6 +131,9 @@ def test_list_species_with_quality_gap_filters(client, db):
                 "пользователю понять признаки, местообитания и сезонность."
             ),
             audio_url="/api/media/species-audio/full.ogg",
+            interesting_facts=[
+                "Полное описание дополнено отдельным фактом для карточки вида."
+            ],
         )
     )
     db.commit()
@@ -140,6 +146,7 @@ def test_list_species_with_quality_gap_filters(client, db):
     short_description = client.get(
         "/api/species?quality_gap=short_description&limit=200"
     )
+    missing_facts = client.get("/api/species?quality_gap=missing_facts&limit=200")
 
     assert missing_photo.status_code == 200
     assert [item["name_latin"] for item in missing_photo.json()["items"]] == [
@@ -154,6 +161,13 @@ def test_list_species_with_quality_gap_filters(client, db):
     assert [item["name_latin"] for item in short_description.json()["items"]] == [
         "Short description"
     ]
+    assert missing_facts.status_code == 200
+    assert {item["name_latin"] for item in missing_facts.json()["items"]} == {
+        "Missing photo",
+        "Missing description",
+        "Missing audio",
+        "Short description",
+    }
 
 
 def test_species_quality_gap_rejects_unknown_value(client):
@@ -272,6 +286,10 @@ def test_create_species_accepts_full_editorial_card(client, admin_token):
             "audio_title": "Голос большой синицы",
             "audio_source": "Wikimedia Commons",
             "audio_license": "CC BY",
+            "interesting_facts": [
+                "Большая синица запоминает удачные места кормления и регулярно к ним возвращается.",
+                "В городских условиях вид использует более высокий тон песен, чтобы перекрывать шум.",
+            ],
         },
         headers={"Authorization": f"Bearer {admin_token}"},
     )
@@ -286,6 +304,38 @@ def test_create_species_accepts_full_editorial_card(client, admin_token):
     assert data["do_dont_rules"] == "Не тревожить гнездо."
     assert data["photo_urls"] == ["https://example.com/parus.jpg"]
     assert data["audio_url"] == "/api/media/species-audio/parus-major.ogg"
+    assert data["interesting_facts"] == [
+        "Большая синица запоминает удачные места кормления и регулярно к ним возвращается.",
+        "В городских условиях вид использует более высокий тон песен, чтобы перекрывать шум.",
+    ]
+
+
+def test_create_species_rejects_invalid_interesting_facts(client, admin_token):
+    blank_fact = client.post(
+        "/api/species",
+        json={
+            "name_ru": "Серая неясыть",
+            "name_latin": "Strix aluco",
+            "group": "birds",
+            "category": "typical",
+            "interesting_facts": ["Гнездится в дуплах.", "   "],
+        },
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    too_many_facts = client.post(
+        "/api/species",
+        json={
+            "name_ru": "Обыкновенная лисица",
+            "name_latin": "Vulpes vulpes",
+            "group": "mammals",
+            "category": "typical",
+            "interesting_facts": [f"Факт {index}" for index in range(9)],
+        },
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+
+    assert blank_fact.status_code == 422
+    assert too_many_facts.status_code == 422
 
 
 def test_create_species_rejects_invalid_audio_url(client, admin_token):
@@ -326,6 +376,9 @@ def test_update_species_accepts_editorial_fields(client, db, admin_token):
             "do_dont_rules": "Не тревожить гнездо.",
             "photo_urls": ["https://example.com/parus.jpg"],
             "audio_url": "/api/media/species-audio/parus-major.ogg",
+            "interesting_facts": [
+                "Синицы охотно обследуют технологические ниши, но гнезда лучше не тревожить."
+            ],
         },
         headers={"Authorization": f"Bearer {admin_token}"},
     )
@@ -340,6 +393,9 @@ def test_update_species_accepts_editorial_fields(client, db, admin_token):
     assert data["do_dont_rules"] == "Не тревожить гнездо."
     assert data["photo_urls"] == ["https://example.com/parus.jpg"]
     assert data["audio_url"] == "/api/media/species-audio/parus-major.ogg"
+    assert data["interesting_facts"] == [
+        "Синицы охотно обследуют технологические ниши, но гнезда лучше не тревожить."
+    ]
 
     audit_log = (
         db.query(AuditLog)
@@ -354,6 +410,7 @@ def test_update_species_accepts_editorial_fields(client, db, admin_token):
         "biotopes",
         "description",
         "do_dont_rules",
+        "interesting_facts",
         "name_latin",
         "name_ru",
         "photo_urls",

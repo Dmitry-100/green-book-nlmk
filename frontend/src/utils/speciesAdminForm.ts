@@ -15,6 +15,7 @@ export type AdminSpeciesRow = {
   audio_title?: string | null
   audio_source?: string | null
   audio_license?: string | null
+  interesting_facts?: string[] | null
 }
 
 export const SPECIES_ADMIN_FORM_TABS = [
@@ -42,6 +43,7 @@ export type AdminSpeciesQualityGap =
   | 'missing_description'
   | 'short_description'
   | 'missing_audio'
+  | 'missing_facts'
 export type AdminSpeciesQualityGapCode = Exclude<AdminSpeciesQualityGap, ''>
 
 type AdminSpeciesListQueryValue =
@@ -88,6 +90,7 @@ export type AdminSpeciesEditForm = {
   audio_title: string
   audio_source: string
   audio_license: string
+  interesting_facts_text: string
 }
 
 const ADMIN_SPECIES_QUERY_KEYS = new Set([
@@ -121,6 +124,7 @@ const ADMIN_SPECIES_QUALITY_GAPS = new Set([
   'missing_description',
   'short_description',
   'missing_audio',
+  'missing_facts',
 ])
 
 const ADMIN_SPECIES_QUALITY_GAP_ITEMS: Array<
@@ -130,6 +134,7 @@ const ADMIN_SPECIES_QUALITY_GAP_ITEMS: Array<
   { code: 'missing_description', label: 'Без описания', type: 'warning' },
   { code: 'short_description', label: 'Короткое описание', type: 'warning' },
   { code: 'missing_audio', label: 'Без аудио', type: 'info' },
+  { code: 'missing_facts', label: 'Без фактов', type: 'warning' },
 ]
 const SHORT_DESCRIPTION_MIN_CHARS = 120
 
@@ -143,6 +148,14 @@ function optionalText(value: string): string | null {
 }
 
 function mediaList(value: string): string[] | null {
+  const items = value
+    .split(/\n|;/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+  return items.length ? items : null
+}
+
+function textList(value: string): string[] | null {
   const items = value
     .split(/\n|;/)
     .map((item) => item.trim())
@@ -310,6 +323,9 @@ export function buildSpeciesAdminQualityBadges(
   if (!hasText(row.audio_url)) {
     badges.push({ code: 'missing_audio', label: 'нет аудио', type: 'info' })
   }
+  if (!row.interesting_facts?.some(hasText)) {
+    badges.push({ code: 'missing_facts', label: 'нет фактов', type: 'warning' })
+  }
   return badges
 }
 
@@ -346,6 +362,7 @@ export function buildSpeciesEditForm(row: AdminSpeciesRow): AdminSpeciesEditForm
     audio_title: text(row.audio_title),
     audio_source: text(row.audio_source),
     audio_license: text(row.audio_license),
+    interesting_facts_text: (row.interesting_facts || []).join('\n'),
   }
 }
 
@@ -367,6 +384,7 @@ export function buildEmptySpeciesForm(): AdminSpeciesEditForm {
     audio_title: '',
     audio_source: '',
     audio_license: '',
+    interesting_facts_text: '',
   }
 }
 
@@ -387,11 +405,13 @@ export function buildSpeciesUpdatePayload(form: AdminSpeciesEditForm) {
     audio_title: optionalText(form.audio_title),
     audio_source: optionalText(form.audio_source),
     audio_license: optionalText(form.audio_license),
+    interesting_facts: textList(form.interesting_facts_text),
   }
 }
 
 export function buildSpeciesFormPreview(form: AdminSpeciesEditForm) {
   const photoUrls = mediaList(form.photo_urls_text)
+  const interestingFacts = textList(form.interesting_facts_text) || []
 
   return {
     name_ru: form.name_ru.trim(),
@@ -407,5 +427,6 @@ export function buildSpeciesFormPreview(form: AdminSpeciesEditForm) {
     photo_url: photoUrls?.[0] || null,
     has_audio: Boolean(optionalText(form.audio_url)),
     audio_title: optionalText(form.audio_title),
+    interesting_facts: interestingFacts,
   }
 }

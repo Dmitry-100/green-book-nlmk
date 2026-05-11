@@ -2,6 +2,26 @@ from pydantic import BaseModel, Field, field_validator
 from app.models.species import SpeciesGroup, SpeciesCategory
 
 
+def _normalize_interesting_facts(value):
+    if value is None:
+        return None
+    if isinstance(value, list):
+        if not value:
+            return None
+        normalized: list[str] = []
+        for item in value:
+            if not isinstance(item, str):
+                return value
+            fact = item.strip()
+            if not fact:
+                raise ValueError("interesting_facts must not contain empty values")
+            if len(fact) > 500:
+                raise ValueError("interesting_facts items must be at most 500 chars")
+            normalized.append(fact)
+        return normalized
+    return value
+
+
 class SpeciesBase(BaseModel):
     name_ru: str = Field(min_length=2, max_length=255)
     name_latin: str = Field(min_length=2, max_length=255)
@@ -19,6 +39,7 @@ class SpeciesBase(BaseModel):
     audio_title: str | None = Field(default=None, max_length=255)
     audio_source: str | None = Field(default=None, max_length=255)
     audio_license: str | None = Field(default=None, max_length=255)
+    interesting_facts: list[str] | None = Field(default=None, max_length=8)
 
     @field_validator("name_ru", "name_latin", mode="before")
     @classmethod
@@ -83,6 +104,11 @@ class SpeciesBase(BaseModel):
         if not (value.startswith("https://") or value.startswith("/api/media/")):
             raise ValueError("audio_url must be https:// or /api/media/")
         return value
+
+    @field_validator("interesting_facts", mode="before")
+    @classmethod
+    def _normalize_interesting_facts(cls, value):
+        return _normalize_interesting_facts(value)
 
 
 class SpeciesCreate(SpeciesBase):
@@ -106,6 +132,7 @@ class SpeciesUpdate(BaseModel):
     audio_title: str | None = Field(default=None, max_length=255)
     audio_source: str | None = Field(default=None, max_length=255)
     audio_license: str | None = Field(default=None, max_length=255)
+    interesting_facts: list[str] | None = Field(default=None, max_length=8)
 
     @field_validator("name_ru", "name_latin", mode="before")
     @classmethod
@@ -170,6 +197,11 @@ class SpeciesUpdate(BaseModel):
         if not (value.startswith("https://") or value.startswith("/api/media/")):
             raise ValueError("audio_url must be https:// or /api/media/")
         return value
+
+    @field_validator("interesting_facts", mode="before")
+    @classmethod
+    def _normalize_interesting_facts(cls, value):
+        return _normalize_interesting_facts(value)
 
 
 class SpeciesResponse(SpeciesBase):

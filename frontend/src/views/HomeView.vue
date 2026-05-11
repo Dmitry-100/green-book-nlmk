@@ -85,7 +85,7 @@
         <div class="fact-banner__body">
           <h3>{{ factOfDay.name_ru }}</h3>
           <div class="fact-banner__latin">{{ factOfDay.name_latin }}</div>
-          <p>{{ factOfDay.description?.slice(0, 200) }}{{ factOfDay.description?.length > 200 ? '...' : '' }}</p>
+          <p>{{ shortFactText(factOfDay) }}</p>
           <router-link :to="`/species/${factOfDay.species_id}`" class="btn-spotlight">Подробнее &rarr;</router-link>
         </div>
       </div>
@@ -220,6 +220,11 @@ function leaderRankClass(index: number) {
   if (index === 1) return 'community-leader__rank--silver'
   if (index === 2) return 'community-leader__rank--bronze'
   return ''
+}
+
+function shortFactText(fact: any): string {
+  const text = fact?.fact_text || fact?.description || ''
+  return text.length > 200 ? `${text.slice(0, 200)}...` : text
 }
 
 function applySummary(data: any) {

@@ -45,6 +45,7 @@ class Species(Base):
     audio_title: Mapped[str | None] = mapped_column(String(255))
     audio_source: Mapped[str | None] = mapped_column(String(255))
     audio_license: Mapped[str | None] = mapped_column(String(255))
+    interesting_facts: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()

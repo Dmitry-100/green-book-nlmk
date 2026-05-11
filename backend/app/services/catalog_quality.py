@@ -62,6 +62,7 @@ def catalog_quality_snapshot(
             Species.photo_urls,
             Species.description,
             Species.audio_url,
+            Species.interesting_facts,
         )
         .order_by(Species.id.asc())
         .all()
@@ -81,6 +82,7 @@ def catalog_quality_snapshot(
         photo_urls,
         description,
         audio_url,
+        interesting_facts,
     ) in rows:
         group_value = _group_value(group)
 
@@ -109,6 +111,8 @@ def catalog_quality_snapshot(
             content_gap_counts["short_description"] += 1
         if not _has_text(audio_url):
             content_gap_counts["missing_audio"] += 1
+        if not _has_any_text(interesting_facts):
+            content_gap_counts["missing_facts"] += 1
 
     species_total = len(rows)
     needs_review_count = species_total - exact_species_count
@@ -125,5 +129,6 @@ def catalog_quality_snapshot(
             "missing_description": content_gap_counts["missing_description"],
             "short_description": content_gap_counts["short_description"],
             "missing_audio": content_gap_counts["missing_audio"],
+            "missing_facts": content_gap_counts["missing_facts"],
         },
     }

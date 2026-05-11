@@ -55,12 +55,14 @@ CatalogQualityGap = Literal[
     "missing_description",
     "short_description",
     "missing_audio",
+    "missing_facts",
 ]
 CATALOG_QUALITY_GAP_FILENAMES = {
     "missing_photo": "missing-photo",
     "missing_description": "missing-description",
     "short_description": "short-description",
     "missing_audio": "missing-audio",
+    "missing_facts": "missing-facts",
 }
 
 CATALOG_EXPORT_FIELDS = [
@@ -82,6 +84,7 @@ CATALOG_EXPORT_FIELDS = [
     "audio_title",
     "audio_source",
     "audio_license",
+    "interesting_facts",
 ]
 
 
@@ -111,7 +114,9 @@ def _species_matches_quality_gap(
         return not _has_text(species.description)
     if quality_gap == "short_description":
         return is_short_description(species.description)
-    return not _has_text(species.audio_url)
+    if quality_gap == "missing_audio":
+        return not _has_text(species.audio_url)
+    return not _has_any_text(species.interesting_facts)
 
 
 def _catalog_export_filename(
@@ -150,6 +155,7 @@ def _species_catalog_export_row(species: Species) -> dict[str, str]:
         "audio_title": species.audio_title or "",
         "audio_source": species.audio_source or "",
         "audio_license": species.audio_license or "",
+        "interesting_facts": ";".join(species.interesting_facts or []),
     }
 
 

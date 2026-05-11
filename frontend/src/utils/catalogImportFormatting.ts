@@ -14,6 +14,7 @@ const CATALOG_FIELD_LABELS: Record<string, string> = {
   audio_title: 'Название аудио',
   audio_source: 'Источник аудио',
   audio_license: 'Лицензия аудио',
+  interesting_facts: 'Интересные факты',
 }
 
 function fieldLabel(field: string): string {

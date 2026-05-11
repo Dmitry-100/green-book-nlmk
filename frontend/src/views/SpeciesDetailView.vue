@@ -21,6 +21,12 @@
           <div class="meta-item" v-if="species.conservation_status"><div class="meta-item__label">Охранный статус</div><div class="meta-item__value">{{ species.conservation_status }}</div></div>
         </div>
         <p v-if="species.description" class="detail-description">{{ species.description }}</p>
+        <section v-if="species.interesting_facts?.length" class="species-facts">
+          <div class="species-facts__eyebrow">Интересные факты</div>
+          <ul>
+            <li v-for="fact in species.interesting_facts" :key="fact">{{ fact }}</li>
+          </ul>
+        </section>
         <div v-if="editorialSections.length" class="field-guide">
           <div
             v-for="section in editorialSections"
@@ -151,6 +157,7 @@ interface SpeciesDetail {
   audio_title?: string | null
   audio_source?: string | null
   audio_license?: string | null
+  interesting_facts?: string[] | null
 }
 interface ObservationMedia {
   s3_key: string
@@ -288,6 +295,10 @@ onMounted(async () => {
 .meta-item__label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #8FA5AB; margin-bottom: 4px; }
 .meta-item__value { font-size: 14px; font-weight: 600; color: #2C3E4A; }
 .detail-description { font-size: 15px; color: #4A6572; line-height: 1.8; }
+.species-facts { margin-top: 22px; padding: 18px; border-radius: 8px; background: #F3F7F8; border: 1px solid rgba(42,122,110,0.14); }
+.species-facts__eyebrow { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #2A7A6E; margin-bottom: 10px; }
+.species-facts ul { margin: 0; padding-left: 20px; color: #2C3E4A; font-size: 14px; line-height: 1.65; }
+.species-facts li + li { margin-top: 8px; }
 .field-guide { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 22px; }
 .field-guide__item { padding: 16px; border-radius: 8px; background: #F3F7F8; border: 1px solid rgba(42,122,110,0.14); }
 .field-guide__eyebrow { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #2A7A6E; margin-bottom: 6px; }

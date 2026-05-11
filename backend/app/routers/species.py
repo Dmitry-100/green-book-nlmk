@@ -25,6 +25,7 @@ SpeciesQualityGap = Literal[
     "missing_description",
     "short_description",
     "missing_audio",
+    "missing_facts",
 ]
 _SPECIES_LIST_CACHE = KeyedTTLCache[
     tuple[str | None, str | None, str | None, bool | None, str | None, int, int, bool],
@@ -94,6 +95,10 @@ def _build_species_list_payload(
         )
     elif quality_gap == "missing_audio":
         query = query.filter((Species.audio_url.is_(None)) | (Species.audio_url == ""))
+    elif quality_gap == "missing_facts":
+        query = query.filter(
+            func.coalesce(func.array_length(Species.interesting_facts, 1), 0) == 0
+        )
     total = query.count() if include_total else None
     items = query.order_by(Species.name_ru).offset(skip).limit(limit).all()
     return {

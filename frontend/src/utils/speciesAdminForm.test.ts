@@ -202,11 +202,13 @@ describe('species admin form', () => {
         photo_urls: [],
         description: ' ',
         audio_url: null,
+        interesting_facts: [],
       })
     ).toEqual([
       { code: 'missing_photo', label: 'нет фото', type: 'warning' },
       { code: 'missing_description', label: 'нет описания', type: 'warning' },
       { code: 'missing_audio', label: 'нет аудио', type: 'info' },
+      { code: 'missing_facts', label: 'нет фактов', type: 'warning' },
     ])
   })
 
@@ -223,6 +225,7 @@ describe('species admin form', () => {
         description:
           'Подробное описание вида для редакционной карточки, которое заметно длиннее минимального порога и помогает пользователю понять признаки, местообитания и сезонность.',
         audio_url: '/api/media/species-audio/parus-major.ogg',
+        interesting_facts: ['Синица меняет сигналы в зависимости от ситуации.'],
       })
     ).toEqual([])
   })
@@ -239,6 +242,7 @@ describe('species admin form', () => {
         photo_urls: ['https://example.com/vulpes.jpg'],
         description: 'Очень коротко.',
         audio_url: '/api/media/species-audio/vulpes.ogg',
+        interesting_facts: ['Лисица использует десятки звуковых сигналов.'],
       })
     ).toEqual([
       {
@@ -253,6 +257,7 @@ describe('species admin form', () => {
     expect(
       buildSpeciesAdminQualityGapItems({
         missing_audio: 7,
+        missing_facts: 9,
         missing_photo: 2,
         short_description: 4,
       })
@@ -271,6 +276,7 @@ describe('species admin form', () => {
         type: 'warning',
       },
       { code: 'missing_audio', label: 'Без аудио', count: 7, type: 'info' },
+      { code: 'missing_facts', label: 'Без фактов', count: 9, type: 'warning' },
     ])
   })
 
@@ -286,6 +292,9 @@ describe('species admin form', () => {
     )
     expect(buildSpeciesAdminQualityGapExportFilename('short_description')).toBe(
       'species-catalog-short-description.csv'
+    )
+    expect(buildSpeciesAdminQualityGapExportFilename('missing_facts')).toBe(
+      'species-catalog-missing-facts.csv'
     )
   })
 
@@ -307,6 +316,7 @@ describe('species admin form', () => {
       audio_title: '',
       audio_source: '',
       audio_license: '',
+      interesting_facts_text: '',
     })
   })
 
@@ -329,6 +339,7 @@ describe('species admin form', () => {
         audio_title: 'Голос',
         audio_source: null,
         audio_license: 'CC BY',
+        interesting_facts: ['Первый факт.', 'Второй факт.'],
       })
     ).toEqual({
       id: 7,
@@ -347,6 +358,7 @@ describe('species admin form', () => {
       audio_title: 'Голос',
       audio_source: '',
       audio_license: 'CC BY',
+      interesting_facts_text: 'Первый факт.\nВторой факт.',
     })
   })
 
@@ -369,6 +381,7 @@ describe('species admin form', () => {
         audio_title: ' ',
         audio_source: ' Wikimedia ',
         audio_license: ' CC BY ',
+        interesting_facts_text: ' Первый факт. \n\n Второй факт. ',
       })
     ).toEqual({
       name_ru: 'Большая синица',
@@ -386,6 +399,7 @@ describe('species admin form', () => {
       audio_title: null,
       audio_source: 'Wikimedia',
       audio_license: 'CC BY',
+      interesting_facts: ['Первый факт.', 'Второй факт.'],
     })
   })
 
@@ -408,6 +422,7 @@ describe('species admin form', () => {
         audio_title: ' Голос большой синицы ',
         audio_source: '',
         audio_license: '',
+        interesting_facts_text: ' Первый факт. \n Второй факт. ',
       })
     ).toEqual({
       name_ru: 'Большая синица',
@@ -423,6 +438,7 @@ describe('species admin form', () => {
       photo_url: 'https://example.com/parus.jpg',
       has_audio: true,
       audio_title: 'Голос большой синицы',
+      interesting_facts: ['Первый факт.', 'Второй факт.'],
     })
   })
 

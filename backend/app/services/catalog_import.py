@@ -24,6 +24,7 @@ CATALOG_IMPORT_EDITABLE_FIELDS = [
     "audio_title",
     "audio_source",
     "audio_license",
+    "interesting_facts",
 ]
 
 _TEXT_LIMITS = {
@@ -116,6 +117,21 @@ def _normalize_photo_urls(value: str) -> list[str] | None:
     return urls
 
 
+def _normalize_interesting_facts(value: str) -> list[str] | None:
+    value = value.strip()
+    if not value:
+        return None
+    facts = [item.strip() for item in value.split(";")]
+    if any(not item for item in facts):
+        raise ValueError("interesting_facts must not contain empty values")
+    if len(facts) > 8:
+        raise ValueError("interesting_facts must contain at most 8 values")
+    for fact in facts:
+        if len(fact) > 500:
+            raise ValueError("interesting_facts items must be at most 500 chars")
+    return facts
+
+
 def _normalize_audio_url(value: str) -> str | None:
     normalized = _normalize_optional_text(value, "audio_url")
     if normalized is None:
@@ -147,6 +163,8 @@ def _normalize_field(field: str, value: str) -> Any:
         return _normalize_bool(value)
     if field == "photo_urls":
         return _normalize_photo_urls(value)
+    if field == "interesting_facts":
+        return _normalize_interesting_facts(value)
     if field == "audio_url":
         return _normalize_audio_url(value)
     raise ValueError(f"Unsupported field: {field}")

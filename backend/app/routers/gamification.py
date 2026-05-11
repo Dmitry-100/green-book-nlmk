@@ -15,6 +15,7 @@ from app.models.observation import Observation, ObservationStatus, SensitiveLeve
 from app.models.species import Species
 from app.models.user import User
 from app.services.cache import KeyedTTLCache, RedisKeyedTTLCache
+from app.services.fact_of_day import build_fact_of_day
 
 router = APIRouter(prefix="/api/gamification", tags=["gamification"])
 _GAMIFICATION_STATS_BASE_MEMORY_CACHE = KeyedTTLCache[str, dict](
@@ -331,28 +332,10 @@ def biodiversity_stats(
 @router.get("/fact-of-day")
 def fact_of_day(db: Session = Depends(get_db)):
     """Random interesting species fact."""
-    eligible_species_query = (
-        db.query(Species)
-        .filter(Species.description.is_not(None), Species.description != "")
-        .order_by(Species.id.asc())
-    )
-    eligible_count = eligible_species_query.count()
-    if eligible_count == 0:
+    fact = build_fact_of_day(db)
+    if fact is None:
         return {"fact": None}
-
-    day_index = datetime.now(timezone.utc).timetuple().tm_yday % eligible_count
-    species = eligible_species_query.offset(day_index).limit(1).first()
-    if not species:
-        return {"fact": None}
-    return {
-        "species_id": species.id,
-        "name_ru": species.name_ru,
-        "name_latin": species.name_latin,
-        "description": species.description,
-        "photo_url": species.photo_urls[0] if species.photo_urls else None,
-        "is_poisonous": species.is_poisonous,
-        "conservation_status": species.conservation_status,
-    }
+    return fact
 
 
 @router.get("/challenge")

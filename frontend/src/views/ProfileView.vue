@@ -71,7 +71,7 @@
         <div class="fact-content">
           <h3>{{ fact.name_ru }}</h3>
           <div class="fact-latin">{{ fact.name_latin }}</div>
-          <p>{{ fact.description }}</p>
+          <p>{{ factText(fact) }}</p>
           <router-link :to="`/species/${fact.species_id}`" class="fact-link">Подробнее &rarr;</router-link>
         </div>
       </div>
@@ -88,6 +88,10 @@ const leaders = ref<any[]>([])
 const fact = ref<any>(null)
 const leaderboardPeriod = ref('all')
 const authError = ref(false)
+
+function factText(value: any): string {
+  return value?.fact_text || value?.description || ''
+}
 
 async function fetchLeaderboard(period: string) {
   leaderboardPeriod.value = period

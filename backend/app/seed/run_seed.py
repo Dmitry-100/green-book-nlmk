@@ -2,6 +2,7 @@
 from app.database import SessionLocal
 from app.models.species import Species, SpeciesGroup, SpeciesCategory
 from app.seed.content_review_20260417 import apply_content_review
+from app.seed.species_enrichment_20260511 import apply_species_enrichment
 from app.seed.species_data import SPECIES_DATA
 
 
@@ -30,8 +31,10 @@ def seed_species():
             print(f"Seeded {len(SPECIES_DATA)} species.")
 
         summary = apply_content_review(db)
+        enrichment_summary = apply_species_enrichment(db)
         db.commit()
         print(f"Applied content review 2026-04-17: {summary}")
+        print(f"Applied species enrichment 2026-05-11: {enrichment_summary}")
     finally:
         db.close()
 

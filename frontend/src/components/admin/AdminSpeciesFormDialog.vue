@@ -91,6 +91,10 @@
               <span>Памятка</span>
               <textarea v-model="form.do_dont_rules" class="species-native-input species-native-textarea" rows="3" />
             </label>
+            <label class="species-field">
+              <span>Интересные факты, по одному на строку</span>
+              <textarea v-model="form.interesting_facts_text" class="species-native-input species-native-textarea" rows="4" />
+            </label>
           </div>
 
           <div v-show="activeTab === speciesFormTabs[2].name" class="species-edit-pane">
@@ -143,6 +147,9 @@
                 <span v-if="preview.do_dont_rules">Памятка: {{ preview.do_dont_rules }}</span>
                 <span v-if="preview.audio_title">Аудио: {{ preview.audio_title }}</span>
               </div>
+              <ul v-if="preview.interesting_facts.length" class="species-form-preview__facts-list">
+                <li v-for="fact in preview.interesting_facts" :key="fact">{{ fact }}</li>
+              </ul>
             </div>
           </div>
 
@@ -490,6 +497,18 @@ function categoryLabel(category: string): string {
   font-size: 12px;
   line-height: 1.35;
   overflow-wrap: anywhere;
+}
+
+.species-form-preview__facts-list {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: var(--slate-deep);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.species-form-preview__facts-list li + li {
+  margin-top: 4px;
 }
 
 @media (max-width: 768px) {

@@ -35,6 +35,7 @@ def _create_species(
     with_description: bool = True,
     with_photo: bool = True,
     with_conservation_status: bool = True,
+    interesting_facts: list[str] | None = None,
 ) -> Species:
     species = Species(
         name_ru=f"Species {suffix}",
@@ -44,6 +45,7 @@ def _create_species(
         conservation_status="LC" if with_conservation_status else None,
         description=f"Description {suffix}" if with_description else None,
         photo_urls=[f"/api/media/species/{suffix}.jpg"] if with_photo else [],
+        interesting_facts=interesting_facts,
     )
     db.add(species)
     db.commit()
@@ -249,6 +251,26 @@ def test_fact_of_day_handles_empty_and_single_eligible_species(client, db):
     assert payload["photo_url"] == fact_species.photo_urls[0]
 
     assert empty_species.id != fact_species.id
+
+
+def test_fact_of_day_endpoint_prefers_interesting_facts(client, db):
+    fact_species = _create_species(
+        db,
+        suffix="FactList",
+        group=SpeciesGroup.fungi,
+        interesting_facts=["Первый отдельный факт.", "Второй отдельный факт."],
+    )
+
+    response = client.get("/api/gamification/fact-of-day")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["species_id"] == fact_species.id
+    assert payload["fact_text"] in {
+        "Первый отдельный факт.",
+        "Второй отдельный факт.",
+    }
+    assert payload["description"] == payload["fact_text"]
 
 
 def test_monthly_challenge_handles_empty_and_found_paths(client, db):
