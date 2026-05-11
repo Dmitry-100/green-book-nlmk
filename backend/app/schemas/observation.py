@@ -74,6 +74,7 @@ class ObservationResponse(BaseModel):
     created_at: datetime
     lat: float | None = None
     lon: float | None = None
+    author_display_name: str | None = None
     media: list[MediaInfo] = []
     model_config = {"from_attributes": True}
 

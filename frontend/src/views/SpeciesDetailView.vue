@@ -58,6 +58,70 @@
         <div class="detail-actions"><router-link to="/species" class="btn btn-outline">&larr; К списку видов</router-link></div>
       </div>
     </div>
+
+    <section class="species-observations">
+      <div class="species-observations__header">
+        <div>
+          <div class="species-observations__eyebrow">Наблюдения пользователей</div>
+          <h2>
+            Находки этого вида
+            <span v-if="observationsTotal !== null">{{ observationsTotal }}</span>
+          </h2>
+          <p>Подтвержденные находки видны всем, ваши записи на проверке тоже останутся под рукой.</p>
+        </div>
+        <router-link :to="observeLink" class="btn btn-primary">Сообщить наблюдение</router-link>
+      </div>
+
+      <div v-if="observationsLoading && !speciesObservations.length" class="species-observations__state">
+        Загружаем наблюдения...
+      </div>
+      <div v-else-if="observationsError && !speciesObservations.length" class="species-observations__state species-observations__state--error">
+        {{ observationsError }}
+      </div>
+      <div v-else-if="!speciesObservations.length" class="species-observations__empty">
+        Пока нет наблюдений этого вида. Можно стать первым.
+      </div>
+      <div v-else class="species-observations__list">
+        <router-link
+          v-for="observation in speciesObservations"
+          :key="observation.id"
+          :to="`/observations/${observation.id}`"
+          class="species-observation-card"
+        >
+          <div
+            v-if="observation.media?.length"
+            class="species-observation-card__thumb"
+            :style="{ backgroundImage: `url(${observationPreviewUrl(observation)})` }"
+          ></div>
+          <div v-else class="species-observation-card__icon">{{ groupIcon }}</div>
+          <div class="species-observation-card__body">
+            <div class="species-observation-card__meta">
+              <span>{{ formatDateTime(observation.observed_at) }}</span>
+              <span>{{ observation.author_display_name || 'Наблюдатель' }}</span>
+            </div>
+            <div v-if="observation.comment" class="species-observation-card__comment">
+              {{ truncateComment(observation.comment) }}
+            </div>
+          </div>
+          <span class="species-observation-card__status" :class="'species-observation-card__status--' + observation.status">
+            {{ statusLabel(observation.status) }}
+          </span>
+        </router-link>
+      </div>
+      <div v-if="observationsError && speciesObservations.length" class="species-observations__state species-observations__state--error">
+        {{ observationsError }}
+      </div>
+
+      <button
+        v-if="hasMoreObservations"
+        type="button"
+        class="species-observations__more"
+        :disabled="observationsLoading"
+        @click="fetchSpeciesObservations()"
+      >
+        {{ observationsLoading ? 'Загружаем...' : 'Показать еще' }}
+      </button>
+    </section>
   </div>
   <div v-else class="detail-loading">Загрузка...</div>
 </template>
@@ -67,6 +131,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '../api/client'
 import { buildSpeciesEditorialSections } from '../utils/speciesEditorialSections'
+import { buildObservationMediaUrl } from '../services/observationMedia'
 
 const route = useRoute()
 interface SpeciesDetail {
@@ -87,9 +152,27 @@ interface SpeciesDetail {
   audio_source?: string | null
   audio_license?: string | null
 }
+interface ObservationMedia {
+  s3_key: string
+  thumbnail_key?: string | null
+}
+
+interface SpeciesObservation {
+  id: number
+  observed_at: string
+  status: string
+  comment?: string | null
+  author_display_name?: string | null
+  media?: ObservationMedia[]
+}
 
 const species = ref<SpeciesDetail | null>(null)
 const discoverer = ref<any>(null)
+const speciesObservations = ref<SpeciesObservation[]>([])
+const observationsTotal = ref<number | null>(null)
+const observationsLoading = ref(false)
+const observationsError = ref('')
+const OBSERVATIONS_LIMIT = 20
 
 const GROUP_ICONS: Record<string, string> = { plants: '🌿', fungi: '🍄', insects: '🐛', herpetofauna: '🐍', birds: '🐦', mammals: '🦔' }
 const GROUP_LABELS: Record<string, string> = { plants: 'Растения', fungi: 'Грибы', insects: 'Насекомые', herpetofauna: 'Герпетофауна', birds: 'Птицы', mammals: 'Млекопитающие' }
@@ -109,6 +192,10 @@ const categoryLabel = computed(() => {
 })
 const imgStyle = computed(() => species.value?.photo_urls?.length ? { backgroundImage: `url(${species.value.photo_urls[0]})` } : {})
 const editorialSections = computed(() => species.value ? buildSpeciesEditorialSections(species.value) : [])
+const observeLink = computed(() => species.value ? `/observe?species=${species.value.id}&group=${species.value.group}` : '/observe')
+const hasMoreObservations = computed(() => (
+  observationsTotal.value !== null && speciesObservations.value.length < observationsTotal.value
+))
 
 function formatDate(iso: string): string {
   const d = new Date(iso)
@@ -116,9 +203,64 @@ function formatDate(iso: string): string {
   return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`
 }
 
+function formatDateTime(iso: string): string {
+  const d = new Date(iso)
+  return d.toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function statusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    on_review: 'На проверке',
+    needs_data: 'Нужны данные',
+    confirmed: 'Подтверждено',
+    rejected: 'Отклонено',
+  }
+  return labels[status] || status
+}
+
+function truncateComment(comment: string): string {
+  return comment.length > 110 ? `${comment.slice(0, 110)}...` : comment
+}
+
+function observationPreviewUrl(observation: SpeciesObservation): string {
+  const media = observation.media?.[0]
+  if (!media) return ''
+  return buildObservationMediaUrl(media.thumbnail_key || media.s3_key)
+}
+
+async function fetchSpeciesObservations(reset = false) {
+  if (!species.value) return
+  observationsLoading.value = true
+  observationsError.value = ''
+  const skip = reset ? 0 : speciesObservations.value.length
+  try {
+    const { data } = await api.get('/observations', {
+      params: {
+        species_id: species.value.id,
+        visibility: 'accessible',
+        skip,
+        limit: OBSERVATIONS_LIMIT,
+      },
+    })
+    observationsTotal.value = data.total
+    speciesObservations.value = reset ? data.items : [...speciesObservations.value, ...data.items]
+  } catch {
+    observationsError.value = 'Не удалось загрузить наблюдения. Попробуйте обновить страницу.'
+  } finally {
+    observationsLoading.value = false
+  }
+}
+
 onMounted(async () => {
   const { data } = await api.get(`/species/${route.params.id}`)
   species.value = data
+  await fetchSpeciesObservations(true)
   try {
     const res = await api.get(`/gamification/species/${route.params.id}/discoverer`)
     if (res.data.discoverer) {
@@ -164,9 +306,43 @@ onMounted(async () => {
 .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: 600; text-decoration: none; }
 .btn-outline { background: transparent; color: #2A7A6E; border: 1.5px solid #2A7A6E; }
 .btn-outline:hover { background: #2A7A6E; color: white; }
+.btn-primary { background: #2A7A6E; color: white; border: 1.5px solid #2A7A6E; }
+.btn-primary:hover { background: #1B4D4F; border-color: #1B4D4F; }
 .detail-loading { text-align: center; padding: 60px; color: #8FA5AB; }
 .discoverer-block { display: flex; align-items: center; gap: 10px; margin-top: 20px; padding: 14px 16px; background: rgba(42,122,110,0.06); border-radius: 8px; border-left: 3px solid #2A7A6E; font-size: 14px; color: #1B4D4F; }
 .discoverer-icon { font-size: 22px; flex-shrink: 0; }
+.species-observations { margin-top: 34px; padding-top: 28px; border-top: 1px solid #D6E0E3; }
+.species-observations__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 18px; }
+.species-observations__eyebrow { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #2A7A6E; margin-bottom: 6px; }
+.species-observations h2 { margin: 0; font-family: var(--font-display); font-size: 30px; line-height: 1.2; color: #1B4D4F; }
+.species-observations h2 span { margin-left: 8px; font-family: var(--font-body); font-size: 14px; color: #8FA5AB; vertical-align: middle; }
+.species-observations p { margin: 8px 0 0; color: #4A6572; font-size: 14px; line-height: 1.6; }
+.species-observations__list { display: flex; flex-direction: column; gap: 10px; }
+.species-observation-card { display: grid; grid-template-columns: 64px 1fr auto; gap: 14px; align-items: center; min-height: 82px; padding: 12px 14px; border: 1px solid rgba(42,122,110,0.12); border-radius: 8px; background: #FAFBFC; color: inherit; text-decoration: none; transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease; }
+.species-observation-card:hover { border-color: rgba(42,122,110,0.34); box-shadow: 0 8px 28px rgba(44,62,74,0.12); transform: translateY(-1px); }
+.species-observation-card__thumb { width: 64px; height: 58px; border-radius: 8px; background-size: cover; background-position: center; background-color: #D6E0E3; }
+.species-observation-card__icon { width: 64px; height: 58px; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: #E8EEF0; font-size: 28px; }
+.species-observation-card__body { min-width: 0; }
+.species-observation-card__meta { display: flex; flex-wrap: wrap; gap: 8px 14px; color: #8FA5AB; font-size: 12px; font-weight: 700; }
+.species-observation-card__comment { margin-top: 6px; color: #2C3E4A; font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
+.species-observation-card__status { justify-self: end; padding: 5px 12px; border-radius: 8px; font-size: 11px; font-weight: 800; white-space: nowrap; }
+.species-observation-card__status--on_review { background: rgba(255,193,7,0.15); color: #F57F17; }
+.species-observation-card__status--needs_data { background: rgba(33,150,243,0.12); color: #1565C0; }
+.species-observation-card__status--confirmed { background: rgba(76,175,80,0.12); color: #2E7D32; }
+.species-observation-card__status--rejected { background: rgba(229,57,53,0.1); color: #E53935; }
+.species-observations__state,
+.species-observations__empty { padding: 24px; border-radius: 8px; background: #F3F7F8; color: #4A6572; font-size: 14px; text-align: center; }
+.species-observations__state--error { color: #A63A3A; background: rgba(229,57,53,0.08); }
+.species-observations__more { display: block; min-height: 38px; margin: 16px auto 0; padding: 0 18px; border: 1.5px solid #2A7A6E; border-radius: 8px; background: transparent; color: #2A7A6E; font: inherit; font-size: 14px; font-weight: 800; cursor: pointer; }
+.species-observations__more:hover:not(:disabled) { background: rgba(42,122,110,0.08); }
+.species-observations__more:disabled { opacity: 0.6; cursor: progress; }
 @media (max-width: 900px) { .field-guide { grid-template-columns: 1fr; } }
-@media (max-width: 768px) { .detail-header { grid-template-columns: 1fr; } }
+@media (max-width: 768px) {
+  .detail-header { grid-template-columns: 1fr; }
+  .species-observations__header { flex-direction: column; }
+  .species-observation-card { grid-template-columns: 56px 1fr; align-items: start; }
+  .species-observation-card__thumb,
+  .species-observation-card__icon { width: 56px; height: 56px; }
+  .species-observation-card__status { grid-column: 2; justify-self: start; }
+}
 </style>

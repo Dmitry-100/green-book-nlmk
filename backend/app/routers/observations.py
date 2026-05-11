@@ -1,7 +1,9 @@
 from datetime import datetime, timezone
+from typing import Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from geoalchemy2.elements import WKTElement
+from sqlalchemy import or_
 from pydantic import BaseModel as PydanticBaseModel, Field
 from sqlalchemy.orm import Session, selectinload
 
@@ -37,6 +39,7 @@ from app.services.media import (
 
 router = APIRouter(prefix="/api/observations", tags=["observations"])
 MAX_MEDIA_PER_OBSERVATION = 10
+ObservationVisibility = Literal["public", "accessible"]
 
 
 def _invalidate_validation_queue_cache() -> None:
@@ -72,6 +75,60 @@ def _get_observation_for_read(
     if not obs or not _can_view_observation(obs, user):
         raise HTTPException(status_code=404, detail="Observation not found")
     return obs
+
+
+def _attach_author_display_names(observations: list[Observation], db: Session) -> None:
+    author_ids = {obs.author_id for obs in observations if obs.author_id is not None}
+    if not author_ids:
+        return
+
+    names = dict(
+        db.query(User.id, User.display_name)
+        .filter(User.id.in_(author_ids))
+        .all()
+    )
+    for obs in observations:
+        obs.author_display_name = names.get(obs.author_id)
+
+
+def _apply_visibility_filter(
+    query,
+    *,
+    visibility: ObservationVisibility,
+    status: ObservationStatus | None,
+    user: User | None,
+):
+    if visibility == "public":
+        status_filter = status or ObservationStatus.confirmed
+        if status_filter != ObservationStatus.confirmed:
+            if user is None or user.role not in (UserRole.ecologist, UserRole.admin):
+                raise HTTPException(status_code=403, detail="Not enough permissions")
+        return query.filter(Observation.status == status_filter)
+
+    if user is None:
+        if status is not None and status != ObservationStatus.confirmed:
+            raise HTTPException(status_code=403, detail="Not enough permissions")
+        return query.filter(Observation.status == ObservationStatus.confirmed)
+
+    if user.role in (UserRole.ecologist, UserRole.admin):
+        if status is not None:
+            return query.filter(Observation.status == status)
+        return query
+
+    if status is not None:
+        if status == ObservationStatus.confirmed:
+            return query.filter(Observation.status == ObservationStatus.confirmed)
+        return query.filter(
+            Observation.status == status,
+            Observation.author_id == user.id,
+        )
+
+    return query.filter(
+        or_(
+            Observation.status == ObservationStatus.confirmed,
+            Observation.author_id == user.id,
+        )
+    )
 
 
 @router.post("", response_model=ObservationResponse, status_code=201)
@@ -201,24 +258,29 @@ def attach_media(
 @router.get("", response_model=ObservationListResponse)
 def list_observations(
     group: SpeciesGroup | None = None,
+    species_id: int | None = Query(None, gt=0),
     status: ObservationStatus | None = None,
+    visibility: ObservationVisibility = Query("public"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     include_total: bool = Query(True),
     user: User | None = Depends(get_optional_user),
     db: Session = Depends(get_db),
 ):
-    status_filter = status or ObservationStatus.confirmed
-    if status_filter != ObservationStatus.confirmed:
-        if user is None or user.role not in (UserRole.ecologist, UserRole.admin):
-            raise HTTPException(status_code=403, detail="Not enough permissions")
-
     query = db.query(Observation).options(selectinload(Observation.media))
     if group:
         query = query.filter(Observation.group == group.value)
-    query = query.filter(Observation.status == status_filter)
+    if species_id is not None:
+        query = query.filter(Observation.species_id == species_id)
+    query = _apply_visibility_filter(
+        query,
+        visibility=visibility,
+        status=status,
+        user=user,
+    )
     total = query.count() if include_total else None
     items = query.order_by(Observation.created_at.desc()).offset(skip).limit(limit).all()
+    _attach_author_display_names(items, db)
     return ObservationListResponse(items=items, total=total)
 
 
@@ -238,6 +300,7 @@ def my_observations(
         query = query.filter(Observation.status == status)
     total = query.count() if include_total else None
     items = query.order_by(Observation.created_at.desc()).offset(skip).limit(limit).all()
+    _attach_author_display_names(items, db)
     return ObservationListResponse(items=items, total=total)
 
 
@@ -254,6 +317,7 @@ def get_observation(
         ST_Y(Observation.location_point).label("lat"),
         ST_X(Observation.location_point).label("lon"),
     ).filter(Observation.id == obs_id).first()
+    _attach_author_display_names([obs], db)
     result = ObservationResponse.model_validate(obs)
     if coords and coords.lat is not None:
         result.lat = float(coords.lat)

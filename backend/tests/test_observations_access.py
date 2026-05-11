@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from geoalchemy2.elements import WKTElement
 
 from app.models.observation import Observation, ObservationStatus
+from app.models.species import Species, SpeciesCategory, SpeciesGroup
 from app.models.user import User, UserRole
 from tests.conftest import make_token
 
@@ -26,11 +27,12 @@ def _create_observation(
     author_id: int,
     group: str,
     status: ObservationStatus,
+    species_id: int | None = None,
     comment: str = "",
 ) -> Observation:
     obs = Observation(
         author_id=author_id,
-        species_id=None,
+        species_id=species_id,
         group=group,
         observed_at=datetime.now(timezone.utc),
         location_point=WKTElement("POINT(39.60 52.59)", srid=4326),
@@ -43,6 +45,31 @@ def _create_observation(
     db.commit()
     db.refresh(obs)
     return obs
+
+
+def _create_species(db, *, name: str, group: SpeciesGroup = SpeciesGroup.birds) -> Species:
+    species = Species(
+        name_ru=name,
+        name_latin=f"{name} latin",
+        group=group,
+        category=SpeciesCategory.typical,
+        conservation_status=None,
+        is_poisonous=False,
+        season_info=None,
+        biotopes=None,
+        description=None,
+        do_dont_rules=None,
+        qr_url=None,
+        photo_urls=[],
+        audio_url=None,
+        audio_title=None,
+        audio_source=None,
+        audio_license=None,
+    )
+    db.add(species)
+    db.commit()
+    db.refresh(species)
+    return species
 
 
 def test_list_observations_public_only_confirmed(client, db):
@@ -151,3 +178,122 @@ def test_observation_lists_can_skip_total_count(client, db, employee_token):
 def test_list_observations_rejects_unknown_group_filter(client):
     response = client.get("/api/observations?group=unknown")
     assert response.status_code == 422
+
+
+def test_list_observations_filters_confirmed_by_species_and_includes_author(client, db):
+    author = _create_user(db, external_id="obs-species-author", email="obs-species-author@nlmk.com")
+    target_species = _create_species(db, name="Species Observed")
+    other_species = _create_species(db, name="Species Other")
+    matching = _create_observation(
+        db,
+        author_id=author.id,
+        group="birds",
+        species_id=target_species.id,
+        status=ObservationStatus.confirmed,
+        comment="matching confirmed",
+    )
+    _create_observation(
+        db,
+        author_id=author.id,
+        group="birds",
+        species_id=target_species.id,
+        status=ObservationStatus.on_review,
+        comment="matching private",
+    )
+    _create_observation(
+        db,
+        author_id=author.id,
+        group="birds",
+        species_id=other_species.id,
+        status=ObservationStatus.confirmed,
+        comment="other species",
+    )
+
+    response = client.get(f"/api/observations?species_id={target_species.id}")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 1
+    assert [item["id"] for item in payload["items"]] == [matching.id]
+    assert payload["items"][0]["author_display_name"] == "obs-species-author"
+
+
+def test_accessible_species_observations_include_own_private_items(client, db, employee_token):
+    author = _create_user(db, external_id="test-user-001", email="test@nlmk.com")
+    other = _create_user(db, external_id="obs-species-other", email="obs-species-other@nlmk.com")
+    species = _create_species(db, name="Species With Own Private Items")
+    confirmed = _create_observation(
+        db,
+        author_id=other.id,
+        group="birds",
+        species_id=species.id,
+        status=ObservationStatus.confirmed,
+        comment="public confirmed",
+    )
+    own_review = _create_observation(
+        db,
+        author_id=author.id,
+        group="birds",
+        species_id=species.id,
+        status=ObservationStatus.on_review,
+        comment="own review",
+    )
+    other_review = _create_observation(
+        db,
+        author_id=other.id,
+        group="birds",
+        species_id=species.id,
+        status=ObservationStatus.on_review,
+        comment="other review",
+    )
+
+    response = client.get(
+        f"/api/observations?species_id={species.id}&visibility=accessible",
+        headers={"Authorization": f"Bearer {employee_token}"},
+    )
+
+    assert response.status_code == 200
+    ids = {item["id"] for item in response.json()["items"]}
+    assert ids == {confirmed.id, own_review.id}
+    assert other_review.id not in ids
+
+
+def test_accessible_species_observations_include_all_items_for_ecologist(client, db, ecologist_token):
+    author = _create_user(db, external_id="obs-species-author-eco", email="obs-species-author-eco@nlmk.com")
+    species = _create_species(db, name="Species Visible To Ecologist")
+    confirmed = _create_observation(
+        db,
+        author_id=author.id,
+        group="birds",
+        species_id=species.id,
+        status=ObservationStatus.confirmed,
+        comment="confirmed",
+    )
+    on_review = _create_observation(
+        db,
+        author_id=author.id,
+        group="birds",
+        species_id=species.id,
+        status=ObservationStatus.on_review,
+        comment="on review",
+    )
+    rejected = _create_observation(
+        db,
+        author_id=author.id,
+        group="birds",
+        species_id=species.id,
+        status=ObservationStatus.rejected,
+        comment="rejected",
+    )
+
+    response = client.get(
+        f"/api/observations?species_id={species.id}&visibility=accessible",
+        headers={"Authorization": f"Bearer {ecologist_token}"},
+    )
+
+    assert response.status_code == 200
+    assert {item["id"] for item in response.json()["items"]} == {
+        confirmed.id,
+        on_review.id,
+        rejected.id,
+    }
