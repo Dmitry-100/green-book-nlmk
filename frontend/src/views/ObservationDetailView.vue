@@ -1,10 +1,19 @@
 <template>
   <div class="obs-detail-page" v-if="obs">
+    <PageHero
+      :title="`Наблюдение #${obs.id}`"
+      :subtitle="groupLabels[obs.group] || obs.group"
+      icon="🐾"
+      back="/my-observations"
+      back-label="Мои наблюдения"
+      compact
+    />
+    <div class="obs-detail-page__content">
     <div class="obs-detail-card">
       <div class="obs-detail-header">
         <span class="obs-group-icon">{{ groupIcons[obs.group] || '🌱' }}</span>
         <div>
-          <h1>{{ groupLabels[obs.group] || obs.group }}</h1>
+          <h2 class="obs-detail-header__title">{{ groupLabels[obs.group] || obs.group }}</h2>
           <div class="obs-meta">
             <span class="obs-status" :class="'obs-status--' + obs.status">{{ statusLabels[obs.status] || obs.status }}</span>
             <span>{{ formatDate(obs.observed_at) }}</span>
@@ -71,9 +80,6 @@
         </div>
       </div>
     </div>
-
-    <div class="obs-detail-actions">
-      <button @click="$router.back()" class="btn-back">&larr; Назад</button>
     </div>
   </div>
   <div v-else class="obs-loading">Загрузка...</div>
@@ -87,6 +93,7 @@ import {
   resolveObservationMediaPreviewUrl,
   revokeObservationMediaPreviewUrl,
 } from '../services/observationMedia'
+import PageHero from '../components/PageHero.vue'
 
 const route = useRoute()
 const obs = ref<any>(null)
@@ -211,13 +218,14 @@ onUnmounted(releasePhotoObjectUrl)
 </script>
 
 <style scoped>
-.obs-detail-page { max-width: 700px; margin: 0 auto; padding: 32px; }
+.obs-detail-page { padding: 0 0 32px; }
+.obs-detail-page__content { max-width: 700px; margin: 0 auto; padding: 24px 32px 32px; }
 .obs-detail-card { background: #FAFBFC; border-radius: 20px; padding: 32px; box-shadow: 0 2px 12px rgba(44,62,74,0.08); }
 .obs-photo { width: 100%; height: 280px; background-size: cover; background-position: center; border-radius: 12px; margin-bottom: 20px; background-color: #D6E0E3; }
 
 .obs-detail-header { display: flex; gap: 16px; align-items: center; margin-bottom: 20px; }
 .obs-group-icon { font-size: 40px; }
-.obs-detail-header h1 { font-family: 'Cormorant Garamond', serif; font-size: 26px; color: #1B4D4F; margin: 0; }
+.obs-detail-header__title { font-family: 'Cormorant Garamond', serif; font-size: 26px; color: #1B4D4F; margin: 0; font-weight: 600; }
 .obs-meta { display: flex; gap: 12px; align-items: center; font-size: 13px; color: #8FA5AB; margin-top: 4px; }
 .obs-status { padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; }
 .obs-status--on_review { background: rgba(255,193,7,0.15); color: #F57F17; }
@@ -272,13 +280,6 @@ onUnmounted(releasePhotoObjectUrl)
 }
 .comment-form button:disabled { opacity: 0.5; cursor: default; }
 .comment-form button:hover:not(:disabled) { background: #1B4D4F; }
-
-.obs-detail-actions { margin-top: 20px; }
-.btn-back {
-  padding: 8px 16px; background: transparent; border: 1.5px solid #2A7A6E;
-  color: #2A7A6E; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer;
-}
-.btn-back:hover { background: #2A7A6E; color: white; }
 
 .obs-loading { text-align: center; padding: 60px; color: #8FA5AB; }
 </style>

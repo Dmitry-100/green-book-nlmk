@@ -1,8 +1,13 @@
 <template>
   <div class="quiz-page">
-    <h1>Угадай вид</h1>
-    <p class="subtitle">Проверьте свои знания о растительном и животном мире площадки</p>
-
+    <PageHero
+      title="Угадай вид"
+      subtitle="Проверьте свои знания о растительном и животном мире площадки"
+      icon="🎯"
+      kicker="Игра"
+      ambient
+    />
+    <div class="quiz-page__content">
     <div class="quiz-stats">
       <span class="quiz-stat">Правильно: <strong>{{ score }}</strong></span>
       <span class="quiz-stat">Вопрос: <strong>{{ questionNum }}</strong></span>
@@ -36,12 +41,14 @@
     </div>
 
     <div v-else class="quiz-loading">Загрузка вопроса...</div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import api from '../api/client'
+import PageHero from '../components/PageHero.vue'
 
 const question = ref<any>(null)
 const selected = ref<number | null>(null)
@@ -90,9 +97,8 @@ onMounted(() => loadQuestion())
 </script>
 
 <style scoped>
-.quiz-page { max-width: 600px; margin: 0 auto; padding: 32px; }
-.quiz-page h1 { font-family: 'Cormorant Garamond', serif; font-size: 30px; font-weight: 600; color: #1B4D4F; }
-.subtitle { font-size: 14px; color: #8FA5AB; margin-bottom: 20px; }
+.quiz-page { padding: 0 0 32px; }
+.quiz-page__content { max-width: 600px; margin: 0 auto; padding: 24px 32px 32px; }
 
 .quiz-stats { display: flex; gap: 20px; margin-bottom: 20px; }
 .quiz-stat { font-size: 14px; color: #4A6572; }

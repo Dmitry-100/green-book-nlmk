@@ -1,14 +1,13 @@
 <template>
   <div class="passport-page">
-    <!-- Hero banner -->
-    <div class="passport-hero">
-      <div class="passport-hero__overlay"></div>
-      <div class="passport-hero__content">
-        <h1>Экологический паспорт площадки</h1>
-        <p>Аналитика биоразнообразия промышленной площадки ПАО «НЛМК», г. Липецк</p>
-      </div>
-    </div>
-
+    <PageHero
+      title="Экопаспорт"
+      subtitle="Аналитика биоразнообразия промышленной площадки ПАО «НЛМК», г. Липецк"
+      icon="🌍"
+      kicker="Аналитика"
+      ambient
+    />
+    <div class="passport-page__content">
     <!-- Key metrics -->
     <div class="metrics-grid">
       <div class="metric-card metric-card--accent" @mouseenter="showTooltip = true" @mouseleave="showTooltip = false">
@@ -89,6 +88,7 @@
       <p class="section-hint">{{ heatmapHint }}</p>
       <div id="passport-map" ref="mapEl" class="passport-map"></div>
     </div>
+    </div>
   </div>
 </template>
 
@@ -96,6 +96,7 @@
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { getCached } from '../api/client'
 import { loadYmaps } from '../services/ymapsLoader'
+import PageHero from '../components/PageHero.vue'
 
 const stats = ref<any>({
   shannon_index: 0, total_species_in_catalog: 0, confirmed_species: 0,
@@ -246,21 +247,8 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.passport-page { max-width: 1000px; margin: 0 auto; padding: 0 32px 32px; }
-
-/* Hero */
-.passport-hero {
-  position: relative; border-radius: 0 0 24px 24px; overflow: hidden;
-  height: 200px; margin: 0 -32px 28px; display: flex; align-items: center;
-  background: url('/api/media/species-pdf/page23_img07.png') center/cover;
-}
-.passport-hero__overlay {
-  position: absolute; inset: 0;
-  background: linear-gradient(135deg, rgba(27,77,79,0.92) 0%, rgba(42,122,110,0.8) 60%, rgba(27,77,79,0.6) 100%);
-}
-.passport-hero__content { position: relative; z-index: 1; padding: 0 48px; }
-.passport-hero__content h1 { font-family: 'Cormorant Garamond', serif; font-size: 34px; font-weight: 700; color: white; margin: 0 0 6px; }
-.passport-hero__content p { font-size: 15px; color: rgba(255,255,255,0.8); margin: 0; }
+.passport-page { padding: 0 0 32px; }
+.passport-page__content { max-width: 1000px; margin: 0 auto; padding: 24px 32px 32px; }
 
 /* Metrics */
 .metrics-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 24px; }
@@ -330,7 +318,5 @@ onMounted(async () => {
 @media (max-width: 768px) {
   .metrics-grid { grid-template-columns: repeat(2, 1fr); }
   .gallery-grid { grid-template-columns: repeat(2, 1fr); }
-  .passport-hero { height: 160px; }
-  .passport-hero__content h1 { font-size: 24px; }
 }
 </style>

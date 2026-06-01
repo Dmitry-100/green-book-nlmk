@@ -2,8 +2,15 @@
   <div class="home">
     <!-- Hero with swan -->
     <div class="hero">
+      <HeroShaderBackground
+        class="hero__shader"
+        :colors="['#2A7A6E', '#5C7F86', '#8FB8B8', '#F0EAD2', '#3F7C82', '#DDE5B6']"
+        :distortion="1.0"
+        :swirl="0.65"
+        :speed="0.5"
+      />
       <div class="hero__bg" :style="{ backgroundImage: 'url(/img/swan-hero.png)' }"></div>
-      <div class="hero__gradient-left"></div>
+      <div class="hero__veil-left"></div>
       <div class="hero__nlmk-badge">НЛМК</div>
       <div class="hero-content">
         <div class="hero-text">
@@ -23,19 +30,19 @@
         </div>
         <div class="hero-stats">
           <div class="hero-stat">
-            <div class="hero-stat__number">{{ stats.species }}</div>
+            <div class="hero-stat__number">{{ statsSpecies }}</div>
             <div class="hero-stat__label">Видов</div>
           </div>
           <div class="hero-stat">
-            <div class="hero-stat__number">{{ stats.confirmed }}</div>
+            <div class="hero-stat__number">{{ statsConfirmed }}</div>
             <div class="hero-stat__label">Подтверждено</div>
           </div>
           <div class="hero-stat">
-            <div class="hero-stat__number">{{ stats.on_review }}</div>
+            <div class="hero-stat__number">{{ statsOnReview }}</div>
             <div class="hero-stat__label">На проверке</div>
           </div>
           <div class="hero-stat">
-            <div class="hero-stat__number">{{ stats.total_obs }}</div>
+            <div class="hero-stat__number">{{ statsTotal }}</div>
             <div class="hero-stat__label">Наблюдений</div>
           </div>
         </div>
@@ -59,19 +66,22 @@
       <div class="section-header">
         <h2 class="section-title">Вид месяца</h2>
       </div>
-      <div class="spotlight" :style="{ backgroundImage: challenge.species.photo_url ? `linear-gradient(to right, rgba(27,77,79,0.92) 0%, rgba(27,77,79,0.75) 45%, rgba(27,77,79,0.2) 100%), url(${challenge.species.photo_url})` : '' }">
-        <div class="spotlight__body">
-          <span class="spotlight__label">{{ challenge.month }} {{ challenge.year }}</span>
-          <h3 class="spotlight__name">{{ challenge.species.name_ru }}</h3>
-          <div class="spotlight__latin">{{ challenge.species.name_latin }}</div>
-          <p class="spotlight__desc" v-if="challenge.species.conservation_status">{{ challenge.species.conservation_status }}</p>
-          <div v-if="challenge.found" class="spotlight__challenge spotlight__challenge--found">
-            Найден! Первым обнаружил: <strong>{{ challenge.finder.display_name }}</strong>
+      <div class="spotlight-wrap">
+        <SectionAmbient :colors="['#2A7A6E', '#1B4D4F', '#3F7C82', '#A8D3D3', '#DDE5B6']" />
+        <div class="spotlight" :style="{ backgroundImage: challenge.species.photo_url ? `linear-gradient(to right, rgba(27,77,79,0.92) 0%, rgba(27,77,79,0.75) 45%, rgba(27,77,79,0.2) 100%), url(${challenge.species.photo_url})` : '' }">
+          <div class="spotlight__body">
+            <span class="spotlight__label">{{ challenge.month }} {{ challenge.year }}</span>
+            <h3 class="spotlight__name">{{ challenge.species.name_ru }}</h3>
+            <div class="spotlight__latin">{{ challenge.species.name_latin }}</div>
+            <p class="spotlight__desc" v-if="challenge.species.conservation_status">{{ challenge.species.conservation_status }}</p>
+            <div v-if="challenge.found" class="spotlight__challenge spotlight__challenge--found">
+              Найден! Первым обнаружил: <strong>{{ challenge.finder.display_name }}</strong>
+            </div>
+            <div v-else class="spotlight__challenge spotlight__challenge--active">
+              Челлендж: кто первый найдёт этот вид — получит спецбейдж!
+            </div>
+            <router-link :to="`/species/${challenge.species.id}`" class="btn btn-spotlight">Подробнее о виде &rarr;</router-link>
           </div>
-          <div v-else class="spotlight__challenge spotlight__challenge--active">
-            Челлендж: кто первый найдёт этот вид — получит спецбейдж!
-          </div>
-          <router-link :to="`/species/${challenge.species.id}`" class="btn btn-spotlight">Подробнее о виде &rarr;</router-link>
         </div>
       </div>
     </div>
@@ -81,12 +91,15 @@
       <div class="section-header">
         <h2 class="section-title">Факт дня</h2>
       </div>
-      <div class="fact-banner" :style="factOfDay.photo_url ? { backgroundImage: `linear-gradient(to right, rgba(27,77,79,0.92) 0%, rgba(27,77,79,0.7) 50%, transparent 100%), url(${factOfDay.photo_url})` } : {}">
-        <div class="fact-banner__body">
-          <h3>{{ factOfDay.name_ru }}</h3>
-          <div class="fact-banner__latin">{{ factOfDay.name_latin }}</div>
-          <p>{{ shortFactText(factOfDay) }}</p>
-          <router-link :to="`/species/${factOfDay.species_id}`" class="btn-spotlight">Подробнее &rarr;</router-link>
+      <div class="fact-banner-wrap">
+        <SectionAmbient :colors="['#3F7C82', '#1B4D4F', '#2A7A6E', '#DDE5B6', '#A8D3D3']" :speed="0.18" />
+        <div class="fact-banner" :style="factOfDay.photo_url ? { backgroundImage: `linear-gradient(to right, rgba(27,77,79,0.92) 0%, rgba(27,77,79,0.7) 50%, transparent 100%), url(${factOfDay.photo_url})` } : {}">
+          <div class="fact-banner__body">
+            <h3>{{ factOfDay.name_ru }}</h3>
+            <div class="fact-banner__latin">{{ factOfDay.name_latin }}</div>
+            <p>{{ shortFactText(factOfDay) }}</p>
+            <router-link :to="`/species/${factOfDay.species_id}`" class="btn-spotlight">Подробнее &rarr;</router-link>
+          </div>
         </div>
       </div>
     </div>
@@ -103,15 +116,23 @@
           <h3>{{ community.active_observers || 0 }} участников уже внесли вклад</h3>
           <p>Подтверждённые находки, первые открытия и внимательность к деталям двигают Зелёную книгу вперёд.</p>
         </div>
-        <div class="community-leaders" v-if="community.leaders?.length">
-          <div v-for="(leader, index) in community.leaders" :key="leader.user_id" class="community-leader">
+        <MarqueeStrip
+          v-if="community.leaders?.length"
+          class="community-marquee"
+          :duration-sec="Math.max(28, community.leaders.length * 6)"
+        >
+          <div
+            v-for="(leader, index) in community.leaders"
+            :key="leader.user_id"
+            class="community-leader community-leader--marquee"
+          >
             <div class="community-leader__rank" :class="leaderRankClass(index)">{{ index + 1 }}</div>
             <div class="community-leader__body">
               <div class="community-leader__name">{{ leader.display_name }}</div>
               <div class="community-leader__meta">{{ leader.total_points }} баллов</div>
             </div>
           </div>
-        </div>
+        </MarqueeStrip>
         <div class="community-panel__empty" v-else>
           Первые наблюдения скоро появятся здесь.
         </div>
@@ -171,11 +192,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { getCached } from '../api/client'
 import { useAuthStore } from '../stores/auth'
+import HeroShaderBackground from '../components/HeroShaderBackground.vue'
+import SectionAmbient from '../components/SectionAmbient.vue'
+import MarqueeStrip from '../components/MarqueeStrip.vue'
+import { useCountUp } from '../composables/useCountUp'
 
 const stats = reactive({ species: 0, confirmed: 0, on_review: 0, total_obs: 0 })
+const statsSpecies = useCountUp(computed(() => stats.species))
+const statsConfirmed = useCountUp(computed(() => stats.confirmed))
+const statsOnReview = useCountUp(computed(() => stats.on_review))
+const statsTotal = useCountUp(computed(() => stats.total_obs))
 const recentSpecies = ref<any[]>([])
 const factOfDay = ref<any>(null)
 const challenge = ref<any>(null)
@@ -285,30 +314,31 @@ onMounted(async () => {
   display: flex;
   align-items: stretch;
   overflow: hidden;
+  isolation: isolate;
+}
+.hero__shader {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
 }
 .hero__bg {
   position: absolute;
   top: 0; right: 0; bottom: 0;
-  width: 65%;
+  width: 70%;
   background-size: cover;
   background-position: center right;
-  z-index: 1;
+  z-index: 2;
+  opacity: 0.5;
+  mask-image: linear-gradient(to right, transparent 0%, rgba(0,0,0,0.4) 30%, black 60%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, rgba(0,0,0,0.4) 30%, black 60%);
   animation: heroBgReveal 1.2s ease-out;
 }
-.hero__bg::before {
-  content: '';
+.hero__veil-left {
   position: absolute;
-  top: 0; left: 0; bottom: 0;
-  width: 60%;
-  background: linear-gradient(to right, #6B8E95 0%, rgba(107,142,149,0.7) 50%, transparent 100%);
-  z-index: 2;
-}
-.hero__gradient-left {
-  position: absolute;
-  top: 0; left: 0; bottom: 0;
-  width: 50%;
-  background: linear-gradient(135deg, #5C7F86 0%, #6B8E95 40%, rgba(107,142,149,0.85) 100%);
-  z-index: 2;
+  inset: 0;
+  background: linear-gradient(to right, rgba(17,52,55,0.55) 0%, rgba(27,77,79,0.25) 30%, rgba(27,77,79,0.05) 55%, transparent 75%);
+  z-index: 3;
+  pointer-events: none;
 }
 .hero__nlmk-badge {
   position: absolute;
@@ -499,6 +529,18 @@ onMounted(async () => {
 .quick-card__title { font-size: 15px; font-weight: 700; color: white; margin-bottom: 2px; }
 .quick-card__desc { font-size: 12px; color: rgba(255,255,255,0.75); }
 
+/* Spotlight / Fact ambient wrappers */
+.spotlight-wrap,
+.fact-banner-wrap {
+  position: relative;
+  isolation: isolate;
+}
+.spotlight-wrap > .spotlight,
+.fact-banner-wrap > .fact-banner {
+  position: relative;
+  z-index: 1;
+}
+
 /* Spotlight */
 .spotlight {
   border-radius: var(--radius-lg);
@@ -566,15 +608,27 @@ onMounted(async () => {
 
 /* Community */
 .community-panel {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 380px);
-  gap: 18px;
-  align-items: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
   background: #F7FAFA;
   border: 1px solid rgba(42,122,110,0.14);
-  border-radius: 8px;
-  padding: 22px;
+  border-radius: 12px;
+  padding: 24px;
   box-shadow: 0 2px 12px rgba(44,62,74,0.06);
+}
+.community-marquee { margin: 0 -24px -4px; padding: 4px 0; }
+.community-leader--marquee {
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  gap: 12px;
+  align-items: center;
+  min-height: 58px;
+  width: 240px;
+  border-radius: 8px;
+  background: white;
+  border: 1px solid rgba(74,101,114,0.10);
+  padding: 10px 12px;
 }
 .community-panel__intro { display: flex; flex-direction: column; justify-content: center; min-width: 0; }
 .community-panel__kicker {
@@ -643,38 +697,84 @@ onMounted(async () => {
 /* Species Grid */
 .species-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 18px;
 }
+
 .species-card {
   background: var(--white);
   border-radius: var(--radius-md);
   overflow: hidden;
   box-shadow: var(--shadow-card);
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   animation: fadeIn 0.5s ease-out both;
+  position: relative;
 }
 .species-card:nth-child(1) { animation-delay: 0.1s; }
 .species-card:nth-child(2) { animation-delay: 0.15s; }
 .species-card:nth-child(3) { animation-delay: 0.2s; }
 .species-card:nth-child(4) { animation-delay: 0.25s; }
-.species-card:hover { box-shadow: var(--shadow-hover); transform: translateY(-4px); }
-.species-card__img { height: 160px; background-size: cover; background-position: center; position: relative; background-color: #D6E0E3; }
+.species-card:hover { box-shadow: 0 14px 36px rgba(27,77,79,0.22); transform: translateY(-6px); }
+.species-card__img { height: 220px; background-size: cover; background-position: center; position: relative; background-color: #D6E0E3; overflow: hidden; transition: transform 0.6s cubic-bezier(0.2, 0.7, 0.2, 1); }
+.species-card:hover .species-card__img { transform: scale(1.08); }
+.species-card__img::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(27,77,79,0.65) 0%, rgba(27,77,79,0.25) 45%, transparent 65%);
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+}
+.species-card:hover .species-card__img::after { opacity: 1; }
 .species-card__no-photo { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; font-size: 48px; opacity: 0.3; }
 .species-card__status { position: absolute; bottom: 8px; left: 8px; width: 22px; height: 22px; border-radius: 50%; border: 2px solid white; box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
 .species-card__status--confirmed { background: var(--teal); }
 .species-card__status--potential { background: var(--yellow-potential); }
 .species-card__status--reference { background: var(--red-reference); }
 .species-card__poison { position: absolute; top: 8px; right: 8px; background: var(--orange-warning); color: white; width: 24px; height: 24px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 13px; }
-.species-card__body { padding: 12px 14px; }
-.species-card__name-ru { font-weight: 700; font-size: 13px; color: var(--slate-deep); margin-bottom: 2px; }
+.species-card__body { padding: 12px 14px; transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1); }
+.species-card:hover .species-card__body { transform: translateY(-2px); }
+.species-card__name-ru { font-weight: 700; font-size: 13px; color: var(--slate-deep); margin-bottom: 2px; transition: color 0.3s ease; }
+.species-card:hover .species-card__name-ru { color: var(--teal-dark); }
 .species-card__name-lat { font-style: italic; font-size: 11px; color: var(--slate-mid); font-family: var(--font-display); }
 .species-card__tags { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
 .tag { padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; }
 .tag--group { background: rgba(42,122,110,0.1); color: var(--teal); }
-.tag--redbook { background: rgba(229,57,53,0.1); color: var(--red-reference); }
+.tag--redbook {
+  background: rgba(229,57,53,0.12);
+  color: var(--red-reference);
+  position: relative;
+  animation: redbook-pulse 2.4s ease-in-out infinite;
+}
+.tag--redbook::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 4px;
+  box-shadow: 0 0 0 0 rgba(229,57,53,0.5);
+  animation: redbook-ring 2.4s ease-out infinite;
+  pointer-events: none;
+}
 .tag--audio { background: rgba(72,111,125,0.14); color: var(--teal-dark); }
+.species-card__status--reference {
+  background: var(--red-reference);
+  animation: redbook-status-pulse 2.4s ease-in-out infinite;
+}
+@keyframes redbook-pulse {
+  0%, 100% { background: rgba(229,57,53,0.12); }
+  50% { background: rgba(229,57,53,0.22); }
+}
+@keyframes redbook-ring {
+  0% { box-shadow: 0 0 0 0 rgba(229,57,53,0.55); }
+  70% { box-shadow: 0 0 0 6px rgba(229,57,53,0); }
+  100% { box-shadow: 0 0 0 0 rgba(229,57,53,0); }
+}
+@keyframes redbook-status-pulse {
+  0%, 100% { box-shadow: 0 1px 4px rgba(0,0,0,0.2), 0 0 0 0 rgba(229,57,53,0.5); }
+  50% { box-shadow: 0 1px 4px rgba(0,0,0,0.2), 0 0 0 6px rgba(229,57,53,0); }
+}
 
 /* News Feed */
 .news-feed { display: flex; flex-direction: column; gap: 8px; }
@@ -728,10 +828,14 @@ onMounted(async () => {
   .community-panel { grid-template-columns: 1fr; }
   .challenge-banner { grid-template-columns: 1fr; }
   .species-grid { grid-template-columns: repeat(2, 1fr); }
+  .species-gallery { grid-template-columns: repeat(2, 1fr); grid-auto-rows: 180px; }
+  .species-gallery > .species-card:first-child { grid-column: span 2; grid-row: span 1; }
 }
 @media (max-width: 480px) {
   .hero h1 { font-size: 28px; }
   .quick-grid { grid-template-columns: repeat(2, 1fr); }
   .species-grid { grid-template-columns: 1fr; }
+  .species-gallery { grid-template-columns: 1fr; grid-auto-rows: 200px; }
+  .species-gallery > .species-card:first-child { grid-column: span 1; }
 }
 </style>

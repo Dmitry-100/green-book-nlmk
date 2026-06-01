@@ -1,8 +1,13 @@
 <template>
   <div class="help-page">
-    <h1>Правила и помощь</h1>
-    <p class="subtitle">Инструкции для безопасного наблюдения на промплощадке</p>
-
+    <PageHero
+      title="Правила и помощь"
+      subtitle="Инструкции для безопасного наблюдения на промплощадке"
+      icon="❓"
+      kicker="Справка"
+      compact
+    />
+    <div class="help-page__content">
     <div class="help-grid">
       <div class="help-card">
         <div class="help-card__icon">🦺</div>
@@ -83,13 +88,17 @@
         <p class="contact-note">По вопросам работы портала обращайтесь к администратору раздела.</p>
       </div>
     </div>
+    </div>
   </div>
 </template>
 
+<script setup lang="ts">
+import PageHero from '../components/PageHero.vue'
+</script>
+
 <style scoped>
-.help-page { max-width: 1000px; margin: 0 auto; padding: 32px; }
-.help-page h1 { font-family: var(--font-display); font-size: 30px; font-weight: 600; color: var(--teal-dark); }
-.subtitle { font-size: 14px; color: var(--slate-mid); margin-bottom: 28px; }
+.help-page { padding: 0 0 32px; }
+.help-page__content { max-width: 1000px; margin: 0 auto; padding: 28px 32px 32px; }
 .help-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .help-card {
   background: var(--white); border-radius: var(--radius-lg); padding: 28px;

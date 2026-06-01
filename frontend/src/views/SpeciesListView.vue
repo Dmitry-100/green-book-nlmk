@@ -1,9 +1,14 @@
 <template>
   <div class="species-page">
-    <div class="species-page__header">
-      <h1>Справочник видов</h1>
-      <p>{{ total }} видов в каталоге</p>
-    </div>
+    <PageHero
+      title="Справочник видов"
+      :subtitle="`${total} видов в каталоге`"
+      icon="🌿"
+      kicker="Каталог"
+      compact
+      ambient
+    />
+    <div class="species-page__content">
     <div class="species-page__filters">
       <label class="species-search">
         <input
@@ -49,7 +54,13 @@
     <div class="species-grid">
       <SpeciesCard v-for="s in species" :key="s.id" :species="s" />
     </div>
-    <div v-if="species.length === 0 && !loading" class="species-page__empty">Виды не найдены</div>
+    <EmptyState
+      v-if="species.length === 0 && !loading"
+      icon="🔍"
+      title="Виды не найдены"
+      text="Попробуйте изменить фильтры или очистить поиск."
+    />
+    </div>
   </div>
 </template>
 
@@ -58,6 +69,8 @@ import { ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { getCached } from '../api/client'
 import SpeciesCard from '../components/SpeciesCard.vue'
+import PageHero from '../components/PageHero.vue'
+import EmptyState from '../components/EmptyState.vue'
 
 const route = useRoute()
 const species = ref<any[]>([])
@@ -118,10 +131,8 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.species-page { max-width: 1200px; margin: 0 auto; padding: 32px; }
-.species-page__header { margin-bottom: 24px; }
-.species-page__header h1 { font-family: 'Cormorant Garamond', serif; font-size: 30px; font-weight: 600; color: #1B4D4F; }
-.species-page__header p { font-size: 14px; color: #8FA5AB; margin-top: 4px; }
+.species-page { padding: 0 0 32px; }
+.species-page__content { max-width: 1200px; margin: 0 auto; padding: 24px 32px; }
 .species-page__filters { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
 .species-search {
   position: relative;

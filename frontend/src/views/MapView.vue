@@ -1,7 +1,13 @@
 <template>
-  <div class="map-page">
+  <div class="map-page-wrap">
+    <PageHero
+      title="Карта наблюдений"
+      icon="🗺️"
+      kicker="Геоданные"
+      compact
+    />
+    <div class="map-page">
     <div class="map-sidebar">
-      <h2>Карта наблюдений</h2>
       <div class="map-filters">
         <select v-model="groupFilter" class="native-select native-select--small" @change="fetchPoints()">
           <option value="">Все группы</option>
@@ -65,6 +71,7 @@
         <p>{{ mapError }}</p>
       </div>
     </div>
+    </div>
   </div>
 </template>
 
@@ -74,6 +81,7 @@ import axios from 'axios'
 import api, { getCached } from '../api/client'
 import { loadYmaps } from '../services/ymapsLoader'
 import { useAuthStore } from '../stores/auth'
+import PageHero from '../components/PageHero.vue'
 
 const mapEl = ref<HTMLElement>()
 const points = ref<any[]>([])
@@ -322,10 +330,16 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.map-page-wrap {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 56px - 49px);
+}
 .map-page {
   display: grid;
   grid-template-columns: 320px 1fr;
-  height: calc(100vh - 56px - 49px);
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 .map-sidebar {
@@ -336,12 +350,6 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 20px;
-}
-.map-sidebar h2 {
-  font-family: var(--font-display);
-  font-size: 22px;
-  font-weight: 600;
-  color: var(--teal-dark);
 }
 .map-filters { display: flex; flex-direction: column; gap: 8px; }
 .native-select {

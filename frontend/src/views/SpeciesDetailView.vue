@@ -1,5 +1,15 @@
 <template>
   <div class="detail-page" v-if="species">
+    <PageHero
+      :title="species.name_ru"
+      :subtitle="species.name_latin"
+      :icon="groupIcon"
+      :kicker="groupLabel"
+      back="/species"
+      back-label="К каталогу"
+      compact
+    />
+    <div class="detail-page__content">
     <div class="detail-header">
       <div class="detail-gallery">
         <div class="detail-gallery__main" :style="imgStyle">
@@ -12,8 +22,6 @@
         </div>
       </div>
       <div class="detail-info">
-        <h1>{{ species.name_ru }}</h1>
-        <div class="latin">{{ species.name_latin }}</div>
         <div class="detail-meta">
           <div class="meta-item"><div class="meta-item__label">Группа</div><div class="meta-item__value">{{ groupLabel }}</div></div>
           <div class="meta-item"><div class="meta-item__label">Категория</div><div class="meta-item__value">{{ categoryLabel }}</div></div>
@@ -61,7 +69,6 @@
           <span class="discoverer-icon">🏅</span>
           <span>Первое наблюдение: <strong>{{ discoverer.display_name }}</strong>, {{ formatDate(discoverer.discovered_at) }}</span>
         </div>
-        <div class="detail-actions"><router-link to="/species" class="btn btn-outline">&larr; К списку видов</router-link></div>
       </div>
     </div>
 
@@ -84,9 +91,15 @@
       <div v-else-if="observationsError && !speciesObservations.length" class="species-observations__state species-observations__state--error">
         {{ observationsError }}
       </div>
-      <div v-else-if="!speciesObservations.length" class="species-observations__empty">
-        Пока нет наблюдений этого вида. Можно стать первым.
-      </div>
+      <EmptyState
+        v-else-if="!speciesObservations.length"
+        icon="🔍"
+        title="Пока нет наблюдений этого вида"
+        text="Можно стать первым — отправьте находку и попадите в ленту."
+        :cta-label="'Сообщить наблюдение'"
+        :cta-to="observeLink"
+        compact
+      />
       <div v-else class="species-observations__list">
         <router-link
           v-for="observation in speciesObservations"
@@ -128,6 +141,7 @@
         {{ observationsLoading ? 'Загружаем...' : 'Показать еще' }}
       </button>
     </section>
+    </div>
   </div>
   <div v-else class="detail-loading">Загрузка...</div>
 </template>
@@ -138,6 +152,8 @@ import { useRoute } from 'vue-router'
 import api from '../api/client'
 import { buildSpeciesEditorialSections } from '../utils/speciesEditorialSections'
 import { buildObservationMediaUrl } from '../services/observationMedia'
+import PageHero from '../components/PageHero.vue'
+import EmptyState from '../components/EmptyState.vue'
 
 const route = useRoute()
 interface SpeciesDetail {
@@ -278,7 +294,8 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.detail-page { max-width: 1200px; margin: 0 auto; padding: 32px; }
+.detail-page { padding: 0 0 32px; }
+.detail-page__content { max-width: 1200px; margin: 0 auto; padding: 24px 32px 32px; }
 .detail-header { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
 .detail-gallery { border-radius: 20px; overflow: hidden; }
 .detail-gallery__main { width: 100%; height: 380px; background-size: cover; background-position: center; position: relative; background-color: #D6E0E3; }
@@ -288,8 +305,6 @@ onMounted(async () => {
 .detail-badge--status { background: rgba(42,122,110,0.85); color: white; }
 .detail-badge--redbook { background: rgba(229,57,53,0.85); color: white; }
 .detail-badge--poison { background: rgba(255,152,0,0.85); color: white; }
-.detail-info h1 { font-family: 'Cormorant Garamond', serif; font-size: 38px; font-weight: 700; color: #1B4D4F; line-height: 1.2; }
-.latin { font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 20px; color: #4A6572; margin: 4px 0 20px; }
 .detail-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px; }
 .meta-item { background: #E8EEF0; padding: 14px 16px; border-radius: 6px; }
 .meta-item__label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #8FA5AB; margin-bottom: 4px; }

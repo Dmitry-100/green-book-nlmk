@@ -1,17 +1,12 @@
 <template>
   <div class="exhibition-page">
-    <section
-      class="exhibition-hero"
-      :style="{ backgroundImage: `linear-gradient(to right, rgba(27,77,79,0.92), rgba(27,77,79,0.56), rgba(27,77,79,0.18)), url(${heroImage})` }"
-    >
-      <div class="exhibition-hero__content">
-        <div class="exhibition-hero__eyebrow">Фотовыставка 2025</div>
-        <h1>Птицы прудов-отстойников НЛМК</h1>
-        <p>
-          Работы сотрудников и партнеров о водоемах, тростниковых зарослях, сезонных миграциях и редких встречах на промышленной площадке.
-        </p>
-      </div>
-    </section>
+    <PageHero
+      title="Птицы прудов-отстойников НЛМК"
+      subtitle="Работы сотрудников и партнеров о водоемах, тростниковых зарослях, сезонных миграциях и редких встречах на промышленной площадке."
+      icon="🖼"
+      kicker="Птицы · Фотовыставка 2025"
+      ambient
+    />
 
     <section class="exhibition-section">
       <div class="exhibition-section__header">
@@ -56,55 +51,15 @@
 </template>
 
 <script setup lang="ts">
-import { exhibitionHeroImage, exhibitionPhotos } from '../data/exhibitionBirds2025'
+import { exhibitionPhotos } from '../data/exhibitionBirds2025'
+import PageHero from '../components/PageHero.vue'
 
-const heroImage = exhibitionHeroImage
 const exhibitionItems = exhibitionPhotos
 </script>
 
 <style scoped>
 .exhibition-page {
   color: var(--slate-deep);
-}
-
-.exhibition-hero {
-  min-height: 360px;
-  background-size: cover;
-  background-position: center;
-  display: flex;
-  align-items: center;
-}
-
-.exhibition-hero__content {
-  width: 100%;
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 56px 32px;
-}
-
-.exhibition-hero__eyebrow {
-  color: rgba(255,255,255,0.74);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-  margin-bottom: 10px;
-}
-
-.exhibition-hero h1 {
-  max-width: 620px;
-  font-family: var(--font-display);
-  font-size: 44px;
-  line-height: 1.08;
-  color: white;
-  margin-bottom: 18px;
-}
-
-.exhibition-hero p {
-  max-width: 560px;
-  color: rgba(255,255,255,0.82);
-  font-size: 15px;
-  line-height: 1.7;
 }
 
 .exhibition-section {
@@ -265,18 +220,6 @@ const exhibitionItems = exhibitionPhotos
 }
 
 @media (max-width: 640px) {
-  .exhibition-hero {
-    min-height: 320px;
-  }
-
-  .exhibition-hero__content {
-    padding: 40px 20px;
-  }
-
-  .exhibition-hero h1 {
-    font-size: 32px;
-  }
-
   .exhibition-section {
     padding: 28px 20px 20px;
   }

@@ -1,7 +1,13 @@
 <template>
   <div class="observe-page">
-    <h1>{{ form.is_incident ? 'Сообщить об инциденте' : 'Сообщить наблюдение' }}</h1>
-    <p class="subtitle">{{ form.is_incident ? 'Раненое, погибшее животное или другая экстренная ситуация' : 'Расскажите, что вы встретили на территории площадки' }}</p>
+    <PageHero
+      :title="form.is_incident ? 'Сообщить об инциденте' : 'Сообщить наблюдение'"
+      :subtitle="form.is_incident ? 'Раненое, погибшее животное или другая экстренная ситуация' : 'Расскажите, что вы встретили на территории площадки'"
+      :icon="form.is_incident ? '🚨' : '📷'"
+      kicker="Создать"
+      compact
+    />
+    <div class="observe-page__content">
     <div class="form-card">
       <!-- Group selector: 3 columns, bigger cards -->
       <div class="form-section">
@@ -134,11 +140,13 @@
         </button>
       </div>
     </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import PageHero from '../components/PageHero.vue'
 import { useRoute, useRouter } from 'vue-router'
 import api, { getCached } from '../api/client'
 import { loadYmaps } from '../services/ymapsLoader'
@@ -377,9 +385,8 @@ async function submit() {
 </script>
 
 <style scoped>
-.observe-page { max-width: 760px; margin: 0 auto; padding: 32px; }
-.observe-page h1 { font-family: 'Cormorant Garamond', serif; font-size: 30px; font-weight: 600; color: #1B4D4F; }
-.subtitle { font-size: 14px; color: #8FA5AB; margin-bottom: 24px; }
+.observe-page { padding: 0 0 32px; }
+.observe-page__content { max-width: 760px; margin: 0 auto; padding: 24px 32px 32px; }
 .form-card { background: #FAFBFC; border-radius: 20px; padding: 32px; box-shadow: 0 2px 12px rgba(44,62,74,0.08); }
 .form-section { margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid #D6E0E3; }
 .form-section:last-child { border-bottom: none; margin-bottom: 0; }

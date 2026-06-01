@@ -1,8 +1,13 @@
 <template>
   <div class="routes-page">
-    <h1>Маршруты наблюдений</h1>
-    <p class="subtitle">Рекомендованные маршруты для наблюдений за природой на территории площадки</p>
-
+    <PageHero
+      title="Маршруты наблюдений"
+      subtitle="Рекомендованные маршруты для наблюдений за природой на территории площадки"
+      icon="🗺️"
+      kicker="Прогулки"
+      ambient
+    />
+    <div class="routes-page__content">
     <div class="routes-grid">
       <div v-for="route in routes" :key="route.id" class="route-card" :class="{ expanded: expandedRoute === route.id }" @click="toggleRoute(route.id)">
         <div class="route-card__header">
@@ -45,11 +50,13 @@
         <p>Все маршруты проходят по безопасным зонам площадки. Соблюдайте правила ТБ, носите СИЗ, не приближайтесь к диким животным. При обнаружении раненого животного — сообщите экологу.</p>
       </div>
     </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import PageHero from '../components/PageHero.vue'
 
 const expandedRoute = ref<number | null>(null)
 
@@ -124,9 +131,8 @@ const routes = [
 </script>
 
 <style scoped>
-.routes-page { max-width: 800px; margin: 0 auto; padding: 32px; }
-.routes-page h1 { font-family: 'Cormorant Garamond', serif; font-size: 30px; font-weight: 600; color: #1B4D4F; }
-.subtitle { font-size: 14px; color: #8FA5AB; margin-bottom: 24px; }
+.routes-page { padding: 0 0 32px; }
+.routes-page__content { max-width: 800px; margin: 0 auto; padding: 24px 32px 32px; }
 
 .routes-grid { display: flex; flex-direction: column; gap: 12px; }
 .route-card {

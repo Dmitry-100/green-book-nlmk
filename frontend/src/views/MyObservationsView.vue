@@ -1,6 +1,13 @@
 <template>
   <div class="my-obs-page">
-    <h1>Мои наблюдения</h1>
+    <PageHero
+      title="Мои наблюдения"
+      icon="📋"
+      kicker="Личный кабинет"
+      compact
+      ambient
+    />
+    <div class="my-obs-page__content">
     <div class="filters">
       <select v-model="statusFilter" class="native-select" @change="fetchObs">
         <option value="">Все статусы</option>
@@ -26,8 +33,14 @@
         <span class="obs-status" :class="'obs-status--' + obs.status">{{ statusLabel(obs.status) }}</span>
       </div>
     </div>
-    <div v-if="observations.length === 0 && !loading" class="empty">
-      Наблюдений пока нет. <router-link to="/observe">Создать первое?</router-link>
+    <EmptyState
+      v-if="observations.length === 0 && !loading"
+      icon="🌱"
+      title="Наблюдений пока нет"
+      text="Создайте первое наблюдение — поделитесь находкой с командой."
+      cta-label="+ Новое наблюдение"
+      cta-to="/observe"
+    />
     </div>
   </div>
 </template>
@@ -35,6 +48,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import api from '../api/client'
+import PageHero from '../components/PageHero.vue'
+import EmptyState from '../components/EmptyState.vue'
 
 const observations = ref<any[]>([])
 const loading = ref(false)
@@ -67,8 +82,8 @@ onMounted(fetchObs)
 </script>
 
 <style scoped>
-.my-obs-page { max-width: 800px; margin: 0 auto; padding: 32px; }
-.my-obs-page h1 { font-family: 'Cormorant Garamond', serif; font-size: 30px; font-weight: 600; color: #1B4D4F; margin-bottom: 20px; }
+.my-obs-page { padding: 0 0 32px; }
+.my-obs-page__content { max-width: 800px; margin: 0 auto; padding: 24px 32px; }
 .filters { display: flex; gap: 12px; margin-bottom: 24px; align-items: center; }
 .native-select {
   min-width: 180px;

@@ -1,8 +1,13 @@
 <template>
   <div class="identify-page">
-    <h1>Определитель видов</h1>
-    <p class="subtitle">Не знаете, что встретили? Ответьте на несколько вопросов</p>
-
+    <PageHero
+      title="Определитель видов"
+      subtitle="Не знаете, что встретили? Ответьте на несколько вопросов"
+      icon="🔍"
+      kicker="Мастер"
+      compact
+    />
+    <div class="identify-page__content">
     <!-- Step 1: Select group -->
     <div v-if="step === 1" class="step-card">
       <h2>Шаг 1: Что вы видели?</h2>
@@ -54,12 +59,14 @@
         </router-link>
       </div>
     </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue'
 import { getCached } from '../api/client'
+import PageHero from '../components/PageHero.vue'
 
 const step = ref(1)
 const selectedGroup = ref('')
@@ -100,9 +107,8 @@ function createWithUnknown() {
 </script>
 
 <style scoped>
-.identify-page { max-width: 800px; margin: 0 auto; padding: 32px; }
-.identify-page h1 { font-family: 'Cormorant Garamond', serif; font-size: 30px; font-weight: 600; color: #1B4D4F; }
-.subtitle { font-size: 14px; color: #8FA5AB; margin-bottom: 24px; }
+.identify-page { padding: 0 0 32px; }
+.identify-page__content { max-width: 800px; margin: 0 auto; padding: 24px 32px 32px; }
 .step-card { background: #FAFBFC; border-radius: 20px; padding: 32px; box-shadow: 0 2px 12px rgba(44,62,74,0.08); }
 .step-card h2 { font-family: 'Cormorant Garamond', serif; font-size: 22px; color: #1B4D4F; margin-bottom: 20px; }
 .step-hint { font-size: 13px; color: #8FA5AB; margin-bottom: 16px; }

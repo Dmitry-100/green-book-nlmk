@@ -1,8 +1,13 @@
 <template>
   <div class="expert-page">
-    <h1>Кабинет эколога</h1>
-    <p class="subtitle">Очередь валидации наблюдений</p>
-
+    <PageHero
+      title="Очередь экспертизы"
+      subtitle="Очередь валидации наблюдений"
+      icon="🔬"
+      kicker="Эколог"
+      ambient
+    />
+    <div class="expert-page__content">
     <div class="queue-tabs">
       <button v-for="t in tabs" :key="t.value" class="queue-tab" :class="{ active: activeTab === t.value }" @click="activeTab = t.value; fetchQueue()">
         {{ t.label }} <span class="queue-tab__count" v-if="t.count">{{ t.count }}</span>
@@ -34,8 +39,15 @@
       </div>
     </div>
 
-    <div v-if="observations.length === 0 && !loading" class="empty">Очередь пуста</div>
+    <EmptyState
+      v-if="observations.length === 0 && !loading"
+      icon="🍃"
+      title="Очередь пуста"
+      text="Новых наблюдений на валидации сейчас нет."
+      compact
+    />
 
+    </div>
     <ExpertQueueDialogs
       v-if="dialogsLoaded"
       v-model:confirm-open="showConfirmDialog"
@@ -57,6 +69,8 @@
 <script setup lang="ts">
 import { defineAsyncComponent, reactive, ref, onMounted } from 'vue'
 import api, { getCached } from '../api/client'
+import PageHero from '../components/PageHero.vue'
+import EmptyState from '../components/EmptyState.vue'
 
 const ExpertQueueDialogs = defineAsyncComponent(() => import('../components/expert/ExpertQueueDialogs.vue'))
 
@@ -174,9 +188,8 @@ onMounted(fetchQueue)
 </script>
 
 <style scoped>
-.expert-page { max-width: 900px; margin: 0 auto; padding: 32px; }
-.expert-page h1 { font-family: 'Cormorant Garamond', serif; font-size: 30px; font-weight: 600; color: #1B4D4F; }
-.subtitle { font-size: 14px; color: #8FA5AB; margin-bottom: 20px; }
+.expert-page { padding: 0 0 32px; }
+.expert-page__content { max-width: 900px; margin: 0 auto; padding: 24px 32px 32px; }
 .queue-tabs { display: flex; gap: 4px; margin-bottom: 24px; background: #E8EEF0; border-radius: 12px; padding: 4px; }
 .queue-tab { padding: 10px 20px; border: none; background: transparent; font-size: 13px; font-weight: 600; color: #4A6572; cursor: pointer; border-radius: 8px; transition: all 0.2s; display: flex; align-items: center; gap: 6px; }
 .queue-tab.active { background: #FAFBFC; color: #1B4D4F; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
@@ -221,5 +234,4 @@ onMounted(fetchQueue)
 .queue-action--danger:hover {
   background: rgba(229, 57, 53, 0.1);
 }
-.empty { text-align: center; padding: 60px; color: #8FA5AB; font-size: 16px; }
 </style>

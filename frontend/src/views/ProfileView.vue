@@ -4,30 +4,23 @@
       <p>Для просмотра профиля необходимо войти в систему.</p>
       <router-link to="/login" class="auth-error__link">Войти</router-link>
     </div>
-    <div class="profile-header" v-else>
-      <div class="profile-avatar">{{ profile?.display_name?.charAt(0) || 'У' }}</div>
-      <div class="profile-info">
-        <h1>{{ profile?.display_name || 'Загрузка...' }}</h1>
-        <div class="profile-stats-row">
-          <div class="profile-stat">
-            <span class="profile-stat__number">{{ profile?.total_points || 0 }}</span>
-            <span class="profile-stat__label">Баллов</span>
+    <template v-else>
+      <PageHero
+        :title="profile?.display_name || 'Загрузка...'"
+        kicker="Профиль участника"
+        :icon="profile?.display_name?.charAt(0) || 'У'"
+        ambient
+      >
+        <template #bottom>
+          <div class="profile-stats-row">
+            <StatCard glass :value="profile?.total_points || 0" label="Баллов" />
+            <StatCard glass :value="profile?.confirmed_observations || 0" label="Наблюдений" />
+            <StatCard glass :value="profile?.species_collected || 0" label="Видов" />
+            <StatCard glass :value="profile?.first_discoveries || 0" label="Открытий" />
           </div>
-          <div class="profile-stat">
-            <span class="profile-stat__number">{{ profile?.confirmed_observations || 0 }}</span>
-            <span class="profile-stat__label">Наблюдений</span>
-          </div>
-          <div class="profile-stat">
-            <span class="profile-stat__number">{{ profile?.species_collected || 0 }}</span>
-            <span class="profile-stat__label">Видов</span>
-          </div>
-          <div class="profile-stat">
-            <span class="profile-stat__number">{{ profile?.first_discoveries || 0 }}</span>
-            <span class="profile-stat__label">Открытий</span>
-          </div>
-        </div>
-      </div>
-    </div>
+        </template>
+      </PageHero>
+      <div class="profile-page__content">
 
     <div class="section">
       <h2 class="section-title">Достижения</h2>
@@ -76,12 +69,16 @@
         </div>
       </div>
     </div>
+    </div>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import api from '../api/client'
+import PageHero from '../components/PageHero.vue'
+import StatCard from '../components/StatCard.vue'
 
 const profile = ref<any>(null)
 const leaders = ref<any[]>([])
@@ -122,18 +119,16 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.profile-page { max-width: 900px; margin: 0 auto; padding: 32px; }
-.profile-header { display: flex; align-items: center; gap: 28px; margin-bottom: 36px; }
-.profile-avatar {
-  width: 80px; height: 80px; border-radius: 50%; background: var(--teal);
-  color: white; font-size: 32px; font-weight: 700; display: flex;
-  align-items: center; justify-content: center; flex-shrink: 0;
+.profile-page { padding: 0 0 32px; }
+.profile-page__content { max-width: 900px; margin: 0 auto; padding: 24px 32px; }
+.profile-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
 }
-.profile-info h1 { font-family: var(--font-display); font-size: 30px; color: var(--teal-dark); margin-bottom: 12px; }
-.profile-stats-row { display: flex; gap: 24px; }
-.profile-stat { text-align: center; }
-.profile-stat__number { display: block; font-family: var(--font-display); font-size: 28px; font-weight: 700; color: var(--teal); }
-.profile-stat__label { font-size: 11px; color: var(--slate-mid); text-transform: uppercase; letter-spacing: 0.5px; }
+@media (max-width: 720px) {
+  .profile-stats-row { grid-template-columns: repeat(2, 1fr); }
+}
 
 .section { margin-bottom: 32px; }
 .section-title { font-family: var(--font-display); font-size: 24px; color: var(--teal-dark); margin-bottom: 16px; }

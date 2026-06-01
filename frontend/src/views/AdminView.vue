@@ -1,7 +1,12 @@
 <template>
   <div class="admin-page">
-    <h1>Администрирование</h1>
-
+    <PageHero
+      title="Администрирование"
+      icon="⚙️"
+      kicker="Админ"
+      compact
+    />
+    <div class="admin-page__content">
     <div class="admin-tabs">
       <button v-for="t in tabs" :key="t.key" class="admin-tab" :class="{ active: activeTab === t.key }" @click="activeTab = t.key">
         {{ t.icon }} {{ t.label }}
@@ -34,6 +39,7 @@
       <AdminAuditTab :refresh-key="auditRefreshKey" />
     </div>
 
+    </div>
   </div>
 </template>
 
@@ -41,6 +47,7 @@
 import { defineAsyncComponent, ref } from 'vue'
 import { clearCachedGets } from '../api/client'
 import { useAuthStore } from '../stores/auth'
+import PageHero from '../components/PageHero.vue'
 
 const AdminAuditTab = defineAsyncComponent(() => import('../components/admin/AdminAuditTab.vue'))
 const AdminRolesPanel = defineAsyncComponent(() => import('../components/admin/AdminRolesPanel.vue'))
@@ -79,8 +86,8 @@ function onZoneUploadError() {
 </script>
 
 <style scoped>
-.admin-page { max-width: 1000px; margin: 0 auto; padding: 32px; }
-.admin-page h1 { font-family: var(--font-display); font-size: 30px; font-weight: 600; color: var(--teal-dark); margin-bottom: 20px; }
+.admin-page { padding: 0 0 32px; }
+.admin-page__content { max-width: 1000px; margin: 0 auto; padding: 24px 32px 32px; }
 .admin-tabs { display: flex; gap: 4px; margin-bottom: 24px; background: var(--slate-bg); border-radius: 12px; padding: 4px; }
 .admin-tab { padding: 10px 20px; border: none; background: transparent; font-size: 13px; font-weight: 600; color: var(--slate-mid); cursor: pointer; border-radius: 8px; transition: all 0.2s; }
 .admin-tab.active { background: var(--white); color: var(--teal-dark); box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
