@@ -1,4 +1,4 @@
-from app.models.user import User
+from app.models.user import User, UserApprovalStatus, UserRole
 from app.models.species import Species
 from app.models.observation import Observation, ObsMedia
 from app.models.site_zone import SiteZone
@@ -13,6 +13,8 @@ from app.models.gamification import (
 
 __all__ = [
     "User",
+    "UserApprovalStatus",
+    "UserRole",
     "Species",
     "Observation",
     "ObsMedia",

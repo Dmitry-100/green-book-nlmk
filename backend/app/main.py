@@ -5,9 +5,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
 from app.config import settings
+from app.database import SessionLocal
 from app.middleware import RateLimitMiddleware, RequestLoggingMiddleware
 from app.observability import configure_logging, init_sentry
+from app.services.bootstrap import ensure_bootstrap_admin
 from app.routers import health, species, observations, validation, notifications
+from app.routers import auth as auth_router
 from app.routers import identifier as identifier_router
 from app.routers import export as export_router
 from app.routers import map as map_router
@@ -24,6 +27,8 @@ configure_logging()
 async def lifespan(_: FastAPI):
     settings.validate_production_config()
     init_sentry()
+    with SessionLocal() as db:
+        ensure_bootstrap_admin(db)
     yield
 
 
@@ -32,6 +37,14 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+
+@app.middleware("http")
+async def add_noindex_header(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Robots-Tag"] = "noindex, nofollow"
+    return response
+
 
 app.add_middleware(RequestLoggingMiddleware)
 if settings.api_gzip_enabled and settings.api_gzip_minimum_size > 0:
@@ -54,6 +67,7 @@ if settings.api_rate_limit_enabled and settings.api_rate_limit_per_minute > 0:
         requests_per_window=settings.api_rate_limit_per_minute,
     )
 app.include_router(health.router)
+app.include_router(auth_router.router)
 app.include_router(species.router)
 app.include_router(observations.router)
 app.include_router(validation.router)

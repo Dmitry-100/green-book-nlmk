@@ -1,6 +1,6 @@
 
 from app.config import settings
-from app.models.user import User, UserRole
+from app.models.user import User, UserApprovalStatus, UserRole
 from tests.conftest import make_token
 
 
@@ -32,8 +32,17 @@ def test_token_role_claim_is_honored_in_test_env(client, monkeypatch):
     assert response.status_code == 200
 
 
-def test_token_role_claim_is_ignored_outside_dev_and_test(client, monkeypatch):
+def test_token_role_claim_is_ignored_outside_dev_and_test(client, db, monkeypatch):
     monkeypatch.setattr(settings, "app_env", "production")
+    user = User(
+        external_id="auth-prod-admin-001",
+        display_name="Auth Prod User",
+        email="auth-prod-admin-001@nlmk.com",
+        role=UserRole.employee,
+        approval_status=UserApprovalStatus.approved,
+    )
+    db.add(user)
+    db.commit()
     admin_like_token = make_token(
         external_id="auth-prod-admin-001",
         name="Auth Prod Admin",

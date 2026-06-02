@@ -1,0 +1,8 @@
+path_or_pattern,type,section,source,author,license,license_url,attribution,status,risk,notes
+frontend/public/logo-nlmk.svg,logo,brand,Official NLMK logo package,NLMK,internal brand asset,,NLMK,verified,low,Use for light backgrounds.
+frontend/public/logo-nlmk-white.svg,logo,brand,Official NLMK logo package,NLMK,internal brand asset,,NLMK,verified,low,Use for dark backgrounds.
+frontend/public/img/swan-hero.png,image,home hero,Project asset archive,unknown,unknown,,none,unknown,high,Confirm source or replace with licensed/internal hero image before public internet release.
+frontend/public/img/exhibition/birds-2025/*.jpg,image,exhibition,Photo exhibition materials,see frontend/src/data/exhibitionBirds2025.ts,needs permission,,show author in exhibition card,needs_permission,medium,Keep for internal pilot; confirm written permission from authors or event owner.
+backend/media/species-pdf/*.png,image,species catalog,Extracted Green Book source PDF,unknown/internal,needs confirmation,,none,needs_permission,medium,Confirm NLMK owns or has licensed source PDF images.
+backend/media/species-audio/*,audio,species cards,Wikimedia Commons or open source metadata in seed content,see species audio metadata,mixed CC/Public Domain,,show source/license on species card,needs_permission,medium,Audit each audio item; CC BY/CC BY-SA require attribution and license compatibility.
+https://upload.wikimedia.org/*,image,audio,seeded external media,Wikimedia Commons,mixed CC/Public Domain,https://commons.wikimedia.org/,show source/license where required,needs_permission,medium,Verify every imported Wikimedia item before broad rollout.

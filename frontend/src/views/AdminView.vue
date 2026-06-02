@@ -1,25 +1,25 @@
 <template>
   <div class="admin-page">
     <PageHero
-      title="Администрирование"
+      :title="auth.isAdmin() ? 'Администрирование' : 'Заявки пользователей'"
       icon="⚙️"
-      kicker="Админ"
+      :kicker="auth.isAdmin() ? 'Админ' : 'Эколог'"
       compact
     />
     <div class="admin-page__content">
     <div class="admin-tabs">
-      <button v-for="t in tabs" :key="t.key" class="admin-tab" :class="{ active: activeTab === t.key }" @click="activeTab = t.key">
+      <button v-for="t in availableTabs" :key="t.key" class="admin-tab" :class="{ active: activeTab === t.key }" @click="activeTab = t.key">
         {{ t.icon }} {{ t.label }}
       </button>
     </div>
 
     <!-- Species Management -->
-    <div v-if="activeTab === 'species'" class="admin-section">
+    <div v-if="auth.isAdmin() && activeTab === 'species'" class="admin-section">
       <AdminSpeciesTab />
     </div>
 
     <!-- Zone Import -->
-    <div v-if="activeTab === 'zones'" class="admin-section">
+    <div v-if="auth.isAdmin() && activeTab === 'zones'" class="admin-section">
       <AdminZoneImportPanel
         :headers="authHeaders"
         :message="zoneMessage"
@@ -35,7 +35,7 @@
     </div>
 
     <!-- Audit trail -->
-    <div v-if="activeTab === 'audit'" class="admin-section">
+    <div v-if="auth.isAdmin() && activeTab === 'audit'" class="admin-section">
       <AdminAuditTab :refresh-key="auditRefreshKey" />
     </div>
 
@@ -44,7 +44,7 @@
 </template>
 
 <script setup lang="ts">
-import { defineAsyncComponent, ref } from 'vue'
+import { computed, defineAsyncComponent, ref, watchEffect } from 'vue'
 import { clearCachedGets } from '../api/client'
 import { useAuthStore } from '../stores/auth'
 import PageHero from '../components/PageHero.vue'
@@ -66,6 +66,9 @@ const tabs = [
   { key: 'users', icon: '👤', label: 'Роли' },
   { key: 'audit', icon: '🧾', label: 'Аудит' },
 ]
+const availableTabs = computed(() => (
+  auth.isAdmin() ? tabs : tabs.filter(tab => tab.key === 'users')
+))
 
 const authHeaders = { Authorization: `Bearer ${auth.token || ''}` }
 
@@ -83,6 +86,12 @@ function onZoneUploadError() {
   zoneMessage.value = 'Ошибка загрузки файла'
   zoneSuccess.value = false
 }
+
+watchEffect(() => {
+  if (!availableTabs.value.some(tab => tab.key === activeTab.value)) {
+    activeTab.value = availableTabs.value[0]?.key || 'users'
+  }
+})
 </script>
 
 <style scoped>

@@ -14,6 +14,7 @@ from app.models.species import Species
 from app.models.user import User, UserRole
 from app.services.cache import KeyedTTLCache, RedisKeyedTTLCache
 from app.services.fact_of_day import build_fact_of_day
+from app.services.user_privacy import build_public_name
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 _DASHBOARD_SUMMARY_MEMORY_CACHE = KeyedTTLCache[str, dict](
@@ -73,9 +74,11 @@ def _build_monthly_challenge(db: Session) -> dict | None:
     found = False
     if found_observation:
         observation_row, finder_name = found_observation
+        public_name = build_public_name(finder_name)
         found = True
         finder = {
-            "display_name": finder_name or "Unknown",
+            "display_name": public_name,
+            "public_name": public_name,
             "found_at": observation_row.observed_at.isoformat(),
         }
 
@@ -135,7 +138,7 @@ def _build_community_payload(db: Session) -> dict:
         "leaders": [
             {
                 "user_id": user_id,
-                "display_name": display_name,
+                "display_name": build_public_name(display_name),
                 "total_points": int(total_points or 0),
             }
             for user_id, display_name, total_points in leaders_rows

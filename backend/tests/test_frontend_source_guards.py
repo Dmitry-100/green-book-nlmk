@@ -88,3 +88,30 @@ def test_expert_queue_dialogs_stay_native():
     source = _frontend_file("components/expert/ExpertQueueDialogs.vue").read_text()
 
     assert "<el-" not in source
+
+
+def test_deploy_ui_does_not_contain_dev_auth_copy():
+    frontend_root = Path(__file__).resolve().parents[1].parent / "frontend" / "src"
+    readme = Path(__file__).resolve().parents[1].parent / "README.md"
+    if not frontend_root.exists():
+        pytest.skip(f"{frontend_root} is outside the backend-only docker volume")
+
+    banned = [
+        "ФИО тестировщика",
+        "тестового контура",
+        "dev-профиль",
+        "Blitz Identity Provider",
+        "корпоративный портал",
+        "Сменить роль",
+        "Выбор роли",
+    ]
+    sources = [readme.read_text(encoding="utf-8")]
+    sources.extend(
+        path.read_text(encoding="utf-8")
+        for path in frontend_root.rglob("*")
+        if path.suffix in {".vue", ".ts"}
+    )
+    combined = "\n".join(sources)
+
+    for phrase in banned:
+        assert phrase not in combined

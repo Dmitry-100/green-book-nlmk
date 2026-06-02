@@ -121,7 +121,7 @@ router.beforeEach((to) => {
     return { name: 'home' }
   }
 
-  if (to.name === 'admin' && !auth.isAdmin()) {
+  if (to.name === 'admin' && !auth.isEcologist()) {
     return { name: 'home' }
   }
 

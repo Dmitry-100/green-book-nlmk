@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     minio_bucket: str = "greenbook-media"
     auth_secret_key: str = "dev-secret-key-change-in-production"
     auth_algorithm: str = "HS256"
+    auth_access_token_expire_minutes: int = Field(default=60 * 24 * 7, ge=5, le=60 * 24 * 30)
+    bootstrap_admin_login: str | None = None
+    bootstrap_admin_password: str | None = None
+    bootstrap_admin_display_name: str | None = None
+    bootstrap_admin_email: str | None = None
     app_env: str = "development"
     cors_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: ["http://localhost:5173"]
@@ -110,6 +115,10 @@ class Settings(BaseSettings):
             problems.append("CORS_ORIGINS must not be empty")
         if "*" in self.cors_origins:
             problems.append("CORS_ORIGINS cannot contain wildcard in non-development")
+        if self.bootstrap_admin_login and not self.bootstrap_admin_password:
+            problems.append("BOOTSTRAP_ADMIN_PASSWORD is required when BOOTSTRAP_ADMIN_LOGIN is set")
+        if self.bootstrap_admin_password and len(self.bootstrap_admin_password) < 12:
+            problems.append("BOOTSTRAP_ADMIN_PASSWORD must be at least 12 characters")
 
         if problems:
             raise RuntimeError("Invalid production configuration: " + "; ".join(problems))

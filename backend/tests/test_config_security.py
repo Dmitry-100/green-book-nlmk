@@ -3,6 +3,9 @@ import pytest
 from app.config import Settings
 
 
+pytestmark = pytest.mark.no_db
+
+
 def test_production_config_validation_passes_with_secure_values():
     settings = Settings(
         app_env="production",

@@ -16,6 +16,7 @@ from app.models.species import Species
 from app.models.user import User
 from app.services.cache import KeyedTTLCache, RedisKeyedTTLCache
 from app.services.fact_of_day import build_fact_of_day
+from app.services.user_privacy import build_public_name
 
 router = APIRouter(prefix="/api/gamification", tags=["gamification"])
 _GAMIFICATION_STATS_BASE_MEMORY_CACHE = KeyedTTLCache[str, dict](
@@ -73,7 +74,7 @@ def leaderboard(
     leaders = [
         {
             "user_id": user_id,
-            "display_name": display_name,
+            "display_name": build_public_name(display_name),
             "total_points": total,
         }
         for user_id, display_name, total in results
@@ -137,9 +138,11 @@ def species_discoverer(species_id: int, db: Session = Depends(get_db)):
     if discovery is None:
         return {"discoverer": None}
     discovered_at, display_name = discovery
+    public_name = build_public_name(display_name)
     return {
         "discoverer": {
-            "display_name": display_name or "Unknown",
+            "display_name": public_name,
+            "public_name": public_name,
             "discovered_at": discovered_at.isoformat(),
         }
     }
@@ -383,7 +386,7 @@ def monthly_challenge(db: Session = Depends(get_db)):
     if found is not None:
         found_obs, finder_name = found
         finder = {
-            "display_name": finder_name or "Unknown",
+            "display_name": build_public_name(finder_name),
             "found_at": found_obs.observed_at.isoformat(),
         }
 

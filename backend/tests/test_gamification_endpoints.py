@@ -110,15 +110,15 @@ def test_leaderboard_filters_by_period(client, db):
     month_payload = month_response.json()
     assert month_payload["period"] == "month"
     assert [leader["display_name"] for leader in month_payload["leaders"]] == [
-        recent_user.display_name
+        "G"
     ]
 
     all_response = client.get("/api/gamification/leaderboard?period=all")
     assert all_response.status_code == 200
     all_payload = all_response.json()
     assert [leader["display_name"] for leader in all_payload["leaders"]] == [
-        old_user.display_name,
-        recent_user.display_name,
+        "G",
+        "G",
     ]
 
 
@@ -223,7 +223,7 @@ def test_species_discoverer_returns_none_and_discoverer_payload(client, db):
     assert response.status_code == 200
     payload = response.json()
     assert payload["discoverer"] is not None
-    assert payload["discoverer"]["display_name"] == user.display_name
+    assert payload["discoverer"]["display_name"] == "G"
     assert payload["discoverer"]["discovered_at"]
 
 
@@ -306,7 +306,7 @@ def test_monthly_challenge_handles_empty_and_found_paths(client, db):
     assert payload["species"]["id"] == target_species.id
     assert payload["found"] is True
     assert payload["finder"] is not None
-    assert payload["finder"]["display_name"] == user.display_name
+    assert payload["finder"]["display_name"] == "G"
 
     assert no_challenge_species.id != target_species.id
 

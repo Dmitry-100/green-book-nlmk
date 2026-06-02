@@ -4,8 +4,12 @@ import { ref } from 'vue'
 interface UserInfo {
   id: number
   displayName: string
-  email: string
+  publicName: string
+  email: string | null
   role: 'employee' | 'ecologist' | 'admin'
+  approvalStatus: 'pending' | 'approved' | 'rejected'
+  isActive: boolean
+  mustChangePassword: boolean
 }
 
 export const useAuthStore = defineStore('auth', () => {
@@ -20,6 +24,11 @@ export const useAuthStore = defineStore('auth', () => {
   function setUser(u: UserInfo) {
     user.value = u
     localStorage.setItem('auth_user', JSON.stringify(u))
+  }
+
+  function setSession(t: string, u: UserInfo) {
+    setToken(t)
+    setUser(u)
   }
 
   function clearSession() {
@@ -37,5 +46,14 @@ export const useAuthStore = defineStore('auth', () => {
     return user.value?.role === 'admin'
   }
 
-  return { token, user, setToken, setUser, clearSession, isEcologist, isAdmin }
+  return {
+    token,
+    user,
+    setToken,
+    setUser,
+    setSession,
+    clearSession,
+    isEcologist,
+    isAdmin,
+  }
 })

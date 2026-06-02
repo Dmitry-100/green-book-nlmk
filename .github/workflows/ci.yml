@@ -45,6 +45,9 @@ jobs:
           docker compose -f docker-compose.rehearsal.yml config > /tmp/rehearsal-compose.yml
           wc -l /tmp/rehearsal-compose.yml
 
+      - name: Warn about media without content-rights coverage
+        run: python3 scripts/content_rights_check.py
+
   security-fast:
     runs-on: ubuntu-latest
     steps:

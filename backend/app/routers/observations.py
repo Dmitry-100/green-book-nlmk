@@ -36,6 +36,7 @@ from app.services.media import (
     store_uploaded_file,
     validate_uploaded_object,
 )
+from app.services.user_privacy import build_public_name
 
 router = APIRouter(prefix="/api/observations", tags=["observations"])
 MAX_MEDIA_PER_OBSERVATION = 10
@@ -77,7 +78,15 @@ def _get_observation_for_read(
     return obs
 
 
-def _attach_author_display_names(observations: list[Observation], db: Session) -> None:
+def _can_view_author_display_name(user: User | None) -> bool:
+    return user is not None and user.role in (UserRole.ecologist, UserRole.admin)
+
+
+def _attach_author_names(
+    observations: list[Observation],
+    db: Session,
+    user: User | None,
+) -> None:
     author_ids = {obs.author_id for obs in observations if obs.author_id is not None}
     if not author_ids:
         return
@@ -87,8 +96,11 @@ def _attach_author_display_names(observations: list[Observation], db: Session) -
         .filter(User.id.in_(author_ids))
         .all()
     )
+    can_view_full_name = _can_view_author_display_name(user)
     for obs in observations:
-        obs.author_display_name = names.get(obs.author_id)
+        display_name = names.get(obs.author_id)
+        obs.author_public_name = build_public_name(display_name)
+        obs.author_display_name = display_name if can_view_full_name else None
 
 
 def _apply_visibility_filter(
@@ -167,6 +179,7 @@ def create_observation(
     db.commit()
     db.refresh(obs)
     _invalidate_validation_queue_cache()
+    _attach_author_names([obs], db, user)
     return obs
 
 
@@ -252,6 +265,7 @@ def attach_media(
     db.refresh(obs)
     if obs.status in (ObservationStatus.on_review, ObservationStatus.needs_data):
         _invalidate_validation_queue_cache()
+    _attach_author_names([obs], db, user)
     return obs
 
 
@@ -280,7 +294,7 @@ def list_observations(
     )
     total = query.count() if include_total else None
     items = query.order_by(Observation.created_at.desc()).offset(skip).limit(limit).all()
-    _attach_author_display_names(items, db)
+    _attach_author_names(items, db, user)
     return ObservationListResponse(items=items, total=total)
 
 
@@ -300,7 +314,7 @@ def my_observations(
         query = query.filter(Observation.status == status)
     total = query.count() if include_total else None
     items = query.order_by(Observation.created_at.desc()).offset(skip).limit(limit).all()
-    _attach_author_display_names(items, db)
+    _attach_author_names(items, db, user)
     return ObservationListResponse(items=items, total=total)
 
 
@@ -317,7 +331,7 @@ def get_observation(
         ST_Y(Observation.location_point).label("lat"),
         ST_X(Observation.location_point).label("lon"),
     ).filter(Observation.id == obs_id).first()
-    _attach_author_display_names([obs], db)
+    _attach_author_names([obs], db, user)
     result = ObservationResponse.model_validate(obs)
     if coords and coords.lat is not None:
         result.lat = float(coords.lat)
@@ -353,6 +367,7 @@ def update_observation(
     db.refresh(obs)
     if obs.status in (ObservationStatus.on_review, ObservationStatus.needs_data):
         _invalidate_validation_queue_cache()
+    _attach_author_names([obs], db, user)
     return obs
 
 
@@ -409,11 +424,16 @@ def list_comments(
         .all()
     )
     result = []
+    can_view_full_name = _can_view_author_display_name(user)
     for c, author_name in comments:
         result.append({
             "id": c.id,
             "text": c.text,
-            "user_name": author_name or "Unknown",
+            "user_name": (
+                author_name
+                if can_view_full_name
+                else build_public_name(author_name, fallback="Наблюдатель")
+            ),
             "created_at": c.created_at.isoformat(),
         })
     return {"comments": result}
@@ -434,7 +454,12 @@ def add_comment(
     )
     db.add(comment)
     db.commit()
-    return {"id": comment.id, "text": comment.text, "user_name": user.display_name, "created_at": comment.created_at.isoformat()}
+    return {
+        "id": comment.id,
+        "text": comment.text,
+        "user_name": build_public_name(user.display_name, fallback="Наблюдатель"),
+        "created_at": comment.created_at.isoformat(),
+    }
 
 
 @router.get("/{obs_id}/likes")

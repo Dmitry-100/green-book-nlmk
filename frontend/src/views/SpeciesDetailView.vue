@@ -116,7 +116,7 @@
           <div class="species-observation-card__body">
             <div class="species-observation-card__meta">
               <span>{{ formatDateTime(observation.observed_at) }}</span>
-              <span>{{ observation.author_display_name || 'Наблюдатель' }}</span>
+              <span>{{ observation.author_display_name || observation.author_public_name || 'Наблюдатель' }}</span>
             </div>
             <div v-if="observation.comment" class="species-observation-card__comment">
               {{ truncateComment(observation.comment) }}
@@ -186,6 +186,7 @@ interface SpeciesObservation {
   status: string
   comment?: string | null
   author_display_name?: string | null
+  author_public_name?: string | null
   media?: ObservationMedia[]
 }
 

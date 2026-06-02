@@ -14,6 +14,7 @@ from app.models.user import User, UserRole
 from app.schemas.observation import ObservationListResponse, ObservationResponse
 from app.services.audit import audit_event
 from app.services.cache import KeyedTTLCache, RedisKeyedTTLCache
+from app.services.user_privacy import build_public_name
 
 router = APIRouter(prefix="/api/validation", tags=["validation"])
 _VALIDATION_QUEUE_CACHE = KeyedTTLCache[tuple[str | None, int, int, bool], dict](
@@ -53,6 +54,16 @@ def _build_validation_queue_payload(
         query = query.filter(Observation.status == status)
     total = query.count() if include_total else None
     items = query.order_by(Observation.created_at.asc()).offset(skip).limit(limit).all()
+    author_ids = {item.author_id for item in items if item.author_id is not None}
+    author_names = {}
+    if author_ids:
+        author_names = dict(
+            db.query(User.id, User.display_name).filter(User.id.in_(author_ids)).all()
+        )
+    for item in items:
+        display_name = author_names.get(item.author_id)
+        item.author_display_name = display_name
+        item.author_public_name = build_public_name(display_name)
     return {
         "items": [
             ObservationResponse.model_validate(item).model_dump(mode="json")

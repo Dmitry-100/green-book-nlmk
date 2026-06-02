@@ -235,7 +235,7 @@ def test_comments_and_likes_flow_for_confirmed_observation(client, db):
     comments = comments_response.json()["comments"]
     assert len(comments) == 1
     assert comments[0]["text"] == "Looks great"
-    assert comments[0]["user_name"] == "Obs Viewer"
+    assert comments[0]["user_name"] == "OV"
 
     first_like = client.post(f"/api/observations/{obs.id}/likes", headers=headers)
     assert first_like.status_code == 200

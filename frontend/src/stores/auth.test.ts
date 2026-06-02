@@ -36,16 +36,18 @@ describe('auth store', () => {
     setActivePinia(createPinia())
   })
 
-  it('clears only the active auth session when changing tester role', () => {
+  it('clears the active auth session', () => {
     localStorage.setItem('auth_token', 'token')
     localStorage.setItem('auth_user', JSON.stringify({
       id: 1,
       displayName: 'Тестовый Пользователь',
-      email: 'tester@nlmk.dev',
+      publicName: 'ТП',
+      email: 'tester@example.com',
       role: 'employee',
+      approvalStatus: 'approved',
+      isActive: true,
+      mustChangePassword: false,
     }))
-    localStorage.setItem('green-book-dev-auth-display-name', 'Тестовый Пользователь')
-    localStorage.setItem('green-book-dev-auth-email', 'tester@nlmk.dev')
 
     const auth = useAuthStore()
     expect(auth.token).toBe('token')
@@ -56,7 +58,5 @@ describe('auth store', () => {
     expect(auth.user).toBeNull()
     expect(localStorage.getItem('auth_token')).toBeNull()
     expect(localStorage.getItem('auth_user')).toBeNull()
-    expect(localStorage.getItem('green-book-dev-auth-display-name')).toBe('Тестовый Пользователь')
-    expect(localStorage.getItem('green-book-dev-auth-email')).toBe('tester@nlmk.dev')
   })
 })

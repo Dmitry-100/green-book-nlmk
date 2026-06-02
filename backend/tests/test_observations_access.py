@@ -215,7 +215,8 @@ def test_list_observations_filters_confirmed_by_species_and_includes_author(clie
     payload = response.json()
     assert payload["total"] == 1
     assert [item["id"] for item in payload["items"]] == [matching.id]
-    assert payload["items"][0]["author_display_name"] == "obs-species-author"
+    assert payload["items"][0]["author_display_name"] is None
+    assert payload["items"][0]["author_public_name"] == "O"
 
 
 def test_accessible_species_observations_include_own_private_items(client, db, employee_token):

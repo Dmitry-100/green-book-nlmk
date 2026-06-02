@@ -25,7 +25,8 @@ from app.models.observation import (
 from app.models.catalog_import import CatalogImportBatch, CatalogImportBatchStatus
 from app.models.site_zone import SiteZone
 from app.models.species import Species
-from app.models.user import User, UserRole
+from app.models.user import User, UserApprovalStatus, UserRole
+from app.schemas.auth import UserListResponse, UserResponse, UserRoleUpdateRequest
 from app.schemas.audit import (
     AuditEventListResponse,
     AuditEventResponse,
@@ -296,6 +297,22 @@ def _build_ops_summary_payload(db: Session) -> dict:
     }
 
 
+def _get_user_or_404(user_id: int, db: Session) -> User:
+    target = db.query(User).filter(User.id == user_id).first()
+    if target is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return target
+
+
+def _user_list_response(query, *, skip: int, limit: int) -> UserListResponse:
+    total = query.count()
+    items = query.order_by(User.created_at.desc(), User.id.desc()).offset(skip).limit(limit).all()
+    return UserListResponse(
+        items=[UserResponse.from_user(item) for item in items],
+        total=total,
+    )
+
+
 @router.post("/zones/import")
 async def import_zones(
     file: UploadFile = File(...),
@@ -431,6 +448,190 @@ def purge_audit_events(
         candidates=candidates,
         deleted=deleted,
     )
+
+
+@router.get("/users", response_model=UserListResponse)
+def list_users(
+    approval_status: UserApprovalStatus | None = None,
+    role: UserRole | None = None,
+    include_inactive: bool = Query(default=False),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+    user: User = Depends(require_role(UserRole.ecologist, UserRole.admin)),
+    db: Session = Depends(get_db),
+):
+    del user
+    query = db.query(User)
+    if approval_status is not None:
+        query = query.filter(User.approval_status == approval_status)
+    if role is not None:
+        query = query.filter(User.role == role)
+    if not include_inactive:
+        query = query.filter(User.is_active.is_(True))
+    return _user_list_response(query, skip=skip, limit=limit)
+
+
+@router.post("/users/{target_user_id}/approve", response_model=UserResponse)
+def approve_user(
+    target_user_id: int,
+    user: User = Depends(require_role(UserRole.ecologist, UserRole.admin)),
+    db: Session = Depends(get_db),
+):
+    target = _get_user_or_404(target_user_id, db)
+    if not target.is_active:
+        raise HTTPException(status_code=409, detail="User is inactive")
+    previous_status = target.approval_status.value
+    target.approval_status = UserApprovalStatus.approved
+    target.approved_at = datetime.now(timezone.utc)
+    target.approved_by_id = user.id
+    db.commit()
+    db.refresh(target)
+    audit_event(
+        action="admin.user_approve",
+        actor=user,
+        target_type="user",
+        target_id=target.id,
+        details={
+            "previous_status": previous_status,
+            "new_status": target.approval_status.value,
+        },
+        db=db,
+    )
+    return UserResponse.from_user(target)
+
+
+@router.post("/users/{target_user_id}/reject", response_model=UserResponse)
+def reject_user(
+    target_user_id: int,
+    user: User = Depends(require_role(UserRole.ecologist, UserRole.admin)),
+    db: Session = Depends(get_db),
+):
+    target = _get_user_or_404(target_user_id, db)
+    if target.id == user.id:
+        raise HTTPException(status_code=400, detail="Cannot reject own account")
+    previous_status = target.approval_status.value
+    target.approval_status = UserApprovalStatus.rejected
+    target.approved_at = None
+    target.approved_by_id = user.id
+    db.commit()
+    db.refresh(target)
+    audit_event(
+        action="admin.user_reject",
+        actor=user,
+        target_type="user",
+        target_id=target.id,
+        details={
+            "previous_status": previous_status,
+            "new_status": target.approval_status.value,
+        },
+        db=db,
+    )
+    return UserResponse.from_user(target)
+
+
+@router.post("/users/{target_user_id}/set-role", response_model=UserResponse)
+def set_user_role(
+    target_user_id: int,
+    data: UserRoleUpdateRequest,
+    user: User = Depends(require_role(UserRole.admin)),
+    db: Session = Depends(get_db),
+):
+    target = _get_user_or_404(target_user_id, db)
+    previous_role = target.role.value
+    target.role = data.role
+    db.commit()
+    db.refresh(target)
+    audit_event(
+        action="admin.user_set_role",
+        actor=user,
+        target_type="user",
+        target_id=target.id,
+        details={"previous_role": previous_role, "new_role": target.role.value},
+        db=db,
+    )
+    return UserResponse.from_user(target)
+
+
+@router.post("/users/{target_user_id}/deactivate", response_model=UserResponse)
+def deactivate_user(
+    target_user_id: int,
+    user: User = Depends(require_role(UserRole.admin)),
+    db: Session = Depends(get_db),
+):
+    target = _get_user_or_404(target_user_id, db)
+    if target.id == user.id:
+        raise HTTPException(status_code=400, detail="Cannot deactivate own account")
+    target.is_active = False
+    target.approval_status = UserApprovalStatus.rejected
+    db.commit()
+    db.refresh(target)
+    audit_event(
+        action="admin.user_deactivate",
+        actor=user,
+        target_type="user",
+        target_id=target.id,
+        details={"login": target.login},
+        db=db,
+    )
+    return UserResponse.from_user(target)
+
+
+@router.post("/users/{target_user_id}/anonymize", response_model=UserResponse)
+def anonymize_user(
+    target_user_id: int,
+    user: User = Depends(require_role(UserRole.admin)),
+    db: Session = Depends(get_db),
+):
+    target = _get_user_or_404(target_user_id, db)
+    if target.id == user.id:
+        raise HTTPException(status_code=400, detail="Cannot anonymize own account")
+    previous_login = target.login
+    target.is_active = False
+    target.approval_status = UserApprovalStatus.rejected
+    target.role = UserRole.employee
+    target.display_name = "Пользователь удален"
+    target.email = None
+    target.password_hash = None
+    target.login = f"deleted-{target.id}"
+    target.external_id = f"deleted:{target.id}"
+    db.commit()
+    db.refresh(target)
+    audit_event(
+        action="admin.user_anonymize",
+        actor=user,
+        target_type="user",
+        target_id=target.id,
+        details={"previous_login": previous_login},
+        db=db,
+    )
+    return UserResponse.from_user(target)
+
+
+@router.get("/users/{target_user_id}/export")
+def export_user(
+    target_user_id: int,
+    user: User = Depends(require_role(UserRole.admin)),
+    db: Session = Depends(get_db),
+):
+    del user
+    target = _get_user_or_404(target_user_id, db)
+    observations_count = (
+        db.query(func.count(Observation.id))
+        .filter(Observation.author_id == target.id)
+        .scalar()
+        or 0
+    )
+    audit_events_count = (
+        db.query(func.count(AuditLog.id))
+        .filter(AuditLog.actor_user_id == target.id)
+        .scalar()
+        or 0
+    )
+    return {
+        "user": UserResponse.from_user(target),
+        "observations_count": observations_count,
+        "audit_events_count": audit_events_count,
+    }
 
 
 @router.get("/ops/summary")

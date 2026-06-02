@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models.user import User, UserRole
+from app.models.user import User, UserApprovalStatus, UserRole
 from app.observability import user_id_ctx_var
 
 security = HTTPBearer()
@@ -71,6 +71,12 @@ def _get_or_create_user(payload: dict, db: Session) -> User:
     ):
         user = db.query(User).filter(User.email == claimed_email).first()
 
+    if user is None and not should_align_dev_identity:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+        )
+
     if user is None:
         role = _resolve_role(payload, fallback=UserRole.employee)
         user = User(
@@ -78,6 +84,8 @@ def _get_or_create_user(payload: dict, db: Session) -> User:
             display_name=payload.get("name", "Unknown"),
             email=claimed_email or f"{external_id}@nlmk.com",
             role=role,
+            approval_status=UserApprovalStatus.approved,
+            is_active=True,
         )
         db.add(user)
         db.commit()
@@ -120,6 +128,14 @@ def _get_or_create_user(payload: dict, db: Session) -> User:
     return user
 
 
+def _ensure_user_can_authenticate(user: User) -> None:
+    if not user.is_active or user.approval_status != UserApprovalStatus.approved:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User is not approved",
+        )
+
+
 def _set_user_context(user: User) -> User:
     user_id_ctx_var.set(str(user.id))
     return user
@@ -131,6 +147,7 @@ def get_current_user(
 ) -> User:
     payload = _decode_token(credentials.credentials)
     user = _get_or_create_user(payload, db)
+    _ensure_user_can_authenticate(user)
     return _set_user_context(user)
 
 
@@ -142,6 +159,7 @@ def get_optional_user(
         return None
     payload = _decode_token(credentials.credentials)
     user = _get_or_create_user(payload, db)
+    _ensure_user_can_authenticate(user)
     return _set_user_context(user)
 
 

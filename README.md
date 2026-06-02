@@ -88,8 +88,8 @@ Hero-секция с лебедем из обложки «Зелёной кни�
 
 ![Админ-панель](docs/screenshots/16-admin.png)
 
-### Вход (dev-режим)
-Выбор роли для разработки (Сотрудник / Эколог / Администратор). В продакшене — вход через корпоративный SSO (Blitz Identity Provider).
+### Вход и регистрация
+Публичные разделы доступны без входа. Для внесения наблюдений пользователь регистрируется с логином и паролем; новая учетная запись начинает работать после подтверждения экологом или администратором.
 
 ![Вход](docs/screenshots/17-login.png)
 
@@ -183,11 +183,11 @@ Hero-секция с лебедем из обложки «Зелёной кни�
 
 ```
 ┌─────────────────────────────────────────────────┐
-│              Битрикс (nlmk.one)                 │
+│              Внутренняя сеть                    │
 │  ┌───────────┐  ┌────────────────────────────┐  │
-│  │ SSO/Auth  │  │  Vue.js SPA                │  │
-│  │ (Blitz    │  │  «Животный и растительный  │  │
-│  │  OAuth)   │  │   мир»                     │  │
+│  │ Auth API  │  │  Vue.js SPA                │  │
+│  │ login +   │  │  «Животный и растительный  │  │
+│  │ approval  │  │   мир»                     │  │
 │  └─────┬─────┘  └─────────────┬──────────────┘  │
 └────────┼──────────────────────┼──────────────────┘
          │ JWT/token            │ REST API
@@ -221,13 +221,13 @@ Hero-секция с лебедем из обложки «Зелёной кни�
 | Компонент | Технология |
 |---|---|
 | **Backend** | Python 3.12, FastAPI, SQLAlchemy 2.0, GeoAlchemy2, Alembic |
-| **Frontend** | Vue 3, TypeScript, Vite, Pinia, Vue Router, Element Plus |
+| **Frontend** | Vue 3, TypeScript, Vite, Pinia, Vue Router |
 | **БД** | PostgreSQL 16 + PostGIS 3.4 |
 | **Карты** | Яндекс Карты JS API 2.1 |
 | **Медиа** | MinIO (S3-совместимое хранилище) |
 | **Кэш** | Redis 7 |
 | **Инфраструктура** | Docker, Docker Compose |
-| **Аутентификация** | JWT (Blitz SSO в продакшене) |
+| **Аутентификация** | JWT + локальная регистрация с подтверждением |
 
 ---
 
@@ -236,6 +236,7 @@ Hero-секция с лебедем из обложки «Зелёной кни�
 | Группа | Эндпоинты | Описание |
 |---|---|---|
 | **Health** | `GET /api/health` | Проверка состояния |
+| **Auth** | `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me` | Регистрация, вход и текущий пользователь |
 | **Species** | `GET/POST /api/species`, `GET/PUT/DELETE /api/species/{id}` | CRUD справочника видов |
 | **Observations** | `POST/GET /api/observations`, `GET /my`, `GET/{id}`, `PATCH/{id}` | Наблюдения сотрудников |
 | **Comments** | `GET/POST /api/observations/{id}/comments` | Комментарии к наблюдениям |
@@ -247,9 +248,8 @@ Hero-секция с лебедем из обложки «Зелёной кни�
 | **Gamification** | `GET /leaderboard\|profile\|stats\|challenge\|quiz\|fact-of-day` | Геймификация |
 | **Identifier** | `GET /tree`, `POST /suggest` | Дерево определителя |
 | **Export** | `GET /observations` | Выгрузка в XLSX |
-| **Admin** | `POST /zones/import`, `GET /audit/events`, `POST /audit/purge`, `GET /ops/summary`, `GET /ops/alerts` | Импорт зон, audit trail и операционный контроль |
+| **Admin** | `POST /zones/import`, `GET /audit/events`, `POST /audit/purge`, `GET /users`, `POST /users/{id}/approve`, `POST /users/{id}/set-role`, `GET /ops/summary`, `GET /ops/alerts` | Импорт зон, пользователи, audit trail и операционный контроль |
 | **Config** | `GET /config/ymaps` | API-ключ карт |
-| **Dev Auth** | `POST /dev/token` | JWT для разработки |
 
 ---
 
@@ -272,7 +272,7 @@ Hero-секция с лебедем из обложки «Зелёной кни�
 | `/expert` | Кабинет эколога | Очередь валидации |
 | `/admin` | Администрирование | Виды, зоны, роли |
 | `/help` | Правила и помощь | ТБ, инструкции, контакты |
-| `/login` | Вход (dev) | Выбор роли |
+| `/login` | Вход и регистрация | Локальная учетная запись без выбора роли |
 
 ---
 
@@ -280,9 +280,11 @@ Hero-секция с лебедем из обложки «Зелёной кни�
 
 | Роль | Возможности | Навигация |
 |---|---|---|
+| **Гость** | Просмотр главной, каталога, карточек видов, карты, выставки и правил | Публичные вкладки |
+| **Ожидает подтверждения** | Видит статус заявки, но не может отправлять наблюдения | Вход заблокирован до подтверждения |
 | **Сотрудник** | Создание наблюдений, просмотр каталога и карты, викторина, профиль | Все вкладки кроме «Эколог» и «Админ» |
-| **Эколог** | + Валидация наблюдений, экспорт данных | + вкладка «Эколог» |
-| **Администратор** | + Управление справочниками, импорт зон | + вкладки «Эколог» и «Админ» |
+| **Эколог** | + Валидация наблюдений, подтверждение заявок сотрудников, экспорт данных | + вкладка «Эколог» |
+| **Администратор** | + Управление справочниками, пользователями, ролями, импорт зон | + вкладки «Эколог» и «Админ» |
 
 ---
 
@@ -313,7 +315,8 @@ cd green-book-nlmk
 
 # Настроить окружение
 cp .env.example .env
-# Отредактировать .env — добавить YMAPS_API_KEY
+# Отредактировать .env — добавить YMAPS_API_KEY, AUTH_SECRET_KEY,
+# BOOTSTRAP_ADMIN_LOGIN, BOOTSTRAP_ADMIN_PASSWORD, CORS_ORIGINS
 
 # Запустить все сервисы
 docker compose up --build -d
@@ -325,7 +328,6 @@ docker compose exec backend alembic upgrade head
 docker compose exec backend python -m app.seed.run_seed
 docker compose exec backend python -m app.seed.seed_tree
 docker compose exec backend python -m app.seed.seed_achievements
-docker compose exec backend python -m app.seed.seed_demo
 ```
 
 ### Доступ
@@ -336,7 +338,7 @@ docker compose exec backend python -m app.seed.seed_demo
 | Backend API | http://localhost:8000 |
 | Swagger UI | http://localhost:8000/docs |
 | MinIO Console | http://localhost:9001 |
-| Dev Login | http://localhost:5173/login |
+| Login | http://localhost:5173/login |
 
 ---
 
@@ -347,6 +349,46 @@ docker compose exec backend python -m app.seed.seed_demo
 - `GET /api/health` — liveness (приложение + БД)
 - `GET /api/health/ready` — readiness (БД + Redis + MinIO)
 - `GET /api/health/deps` — расширенный dependency snapshot (latency + cache health)
+
+Ожидаемый liveness:
+
+```bash
+curl -fsS http://localhost:8000/api/health | jq
+```
+
+```json
+{
+  "status": "ok",
+  "database": "connected",
+  "details": {
+    "status": "connected",
+    "latency_ms": 1.2,
+    "error": null,
+    "dependency": "database"
+  }
+}
+```
+
+Ожидаемый readiness:
+
+```bash
+curl -fsS http://localhost:8000/api/health/ready | jq
+```
+
+```json
+{
+  "status": "ready",
+  "dependencies": {
+    "database": "connected",
+    "redis": "connected",
+    "minio": "connected"
+  }
+}
+```
+
+Если readiness вернул HTTP `503` или `status=degraded`, деплой не считается готовым:
+проверить Postgres, Redis, MinIO, `DATABASE_URL`, `REDIS_URL`, `MINIO_ENDPOINT`,
+учетные данные MinIO и сетевые правила между контейнерами.
 
 ### Логи и мониторинг
 
@@ -367,6 +409,17 @@ docker compose exec backend ruff check app tests
 
 # Автотесты backend
 docker compose exec backend pytest -q
+
+# Frontend unit tests и production build
+docker compose exec frontend npm run test:unit
+docker compose exec frontend npm run build
+
+# Проверка compose и миграций
+docker compose config -q
+docker compose exec backend alembic upgrade head
+
+# Предупреждения по медиа без записи в реестре прав
+python3 scripts/content_rights_check.py
 ```
 
 - В основном `CI` дополнительно выполняются:
@@ -388,6 +441,33 @@ python scripts/release_smoke.py --base-url https://api.example.com
 python scripts/release_smoke.py \
   --base-url https://api.example.com \
   --admin-token "<admin-bearer-token>"
+```
+
+Успешный smoke завершается кодом `0` и печатает:
+
+```bash
+[PASS] /api/health status=200 ok
+[PASS] /api/health/ready status=200 ok
+[PASS] /api/health/deps status=200 ok
+[PASS] /api/species?limit=1&include_total=false status=200 ok
+[PASS] /api/map/zones status=200 ok
+{"base_url": "https://api.example.com", "checks_total": 5, "checks_failed": 0}
+```
+
+Если передан `--admin-token`, дополнительно должны пройти `/api/metrics`,
+`/api/metrics/prometheus`, `/api/admin/audit/events` и `/api/admin/ops/alerts`.
+Флаг `--fail-on-ops-alerts` делает активные ops-alerts блокирующими.
+
+Полный write-workflow для test/staging создает тестового пользователя, подтверждает
+его, отправляет наблюдение, подтверждает наблюдение и обезличивает тестового
+пользователя. Используйте только там, где допустимы тестовые записи:
+
+```bash
+python scripts/release_smoke.py \
+  --base-url https://api.example.com \
+  --admin-login "$BOOTSTRAP_ADMIN_LOGIN" \
+  --admin-password "$BOOTSTRAP_ADMIN_PASSWORD" \
+  --exercise-write-workflow
 ```
 
 - Для CI доступен manual workflow: `.github/workflows/post-deploy-smoke.yml`
@@ -507,9 +587,12 @@ STAGING_BACKEND_PORT=18000 \
 - `APP_ENV=production`
 - `ENABLE_DEV_AUTH=false`
 - `AUTH_SECRET_KEY` — уникальный секрет (не дефолтный)
+- `BOOTSTRAP_ADMIN_LOGIN` / `BOOTSTRAP_ADMIN_PASSWORD` / `BOOTSTRAP_ADMIN_DISPLAY_NAME` — первая учетная запись администратора; после входа пароль нужно заменить
 - `CORS_ORIGINS` — список разрешённых доменов без `*`
 - `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` — не дефолтные значения
 - `API_RATE_LIMIT_ENABLED=true`
+- `frontend/public/robots.txt` и HTTP header `X-Robots-Tag: noindex, nofollow` включены для защиты от индексации при ошибочной публикации
+- `docs/content-rights/assets-register.csv` заполнен; `python3 scripts/content_rights_check.py` не должен показывать новых непокрытых ассетов
 - Rate limiting учитывает `JWT sub` для авторизованных пользователей (изоляция лимитов между пользователями за одним IP/NAT).
 - `MAP_OBSERVATIONS_CACHE_TTL_SECONDS` — короткий TTL для повторяющихся bbox-запросов карты (обычно `5..20`)
 - `SPECIES_LIST_CACHE_TTL_SECONDS` — TTL server-side cache для `/api/species` (обычно `60..300`)

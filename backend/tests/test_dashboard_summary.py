@@ -154,9 +154,9 @@ def test_dashboard_summary_returns_aggregated_data(client, db, employee_token):
     assert payload["community"]["active_observers"] == 2
     assert payload["community"]["leaderboard_period"] == "all"
     assert [leader["display_name"] for leader in payload["community"]["leaders"]] == [
-        "Test User",
-        "dashboard-other",
-        "dashboard-third",
+        "TU",
+        "D",
+        "D",
     ]
     assert [leader["total_points"] for leader in payload["community"]["leaders"]] == [
         30,
