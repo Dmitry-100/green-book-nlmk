@@ -5,11 +5,6 @@
         <img src="/logo-nlmk-white.svg" alt="НЛМК" class="nlmk-logo" />
         <span>Зелёная книга</span>
       </div>
-      <ul class="portal-nav__links">
-        <li><router-link to="/" class="active">Природа</router-link></li>
-        <li><router-link to="/species">Виды</router-link></li>
-        <li><router-link to="/exhibition">Выставка</router-link></li>
-      </ul>
       <div class="portal-nav__right">
         <div v-if="auth.token" class="notification-bell" @click="$router.push('/my')">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

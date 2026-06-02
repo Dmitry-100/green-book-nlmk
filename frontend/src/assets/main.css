@@ -57,37 +57,6 @@ a { color: var(--teal); }
   align-items: center;
   gap: 10px;
 }
-.nlmk-badge {
-  background: var(--slate-light);
-  color: var(--slate-deep);
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 1.5px;
-}
-.portal-nav__links {
-  display: flex;
-  gap: 4px;
-  list-style: none;
-}
-.portal-nav__links a,
-.portal-nav__links span {
-  color: var(--slate-pale);
-  text-decoration: none;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 8px 14px;
-  border-radius: var(--radius-sm);
-  transition: all 0.2s;
-  cursor: pointer;
-}
-.portal-nav__links a:hover,
-.portal-nav__links span:hover,
-.portal-nav__links .active {
-  background: rgba(255,255,255,0.1);
-  color: var(--white);
-}
 .portal-nav__right {
   display: flex;
   align-items: center;
@@ -157,7 +126,6 @@ a { color: var(--teal); }
 
 /* === RESPONSIVE === */
 @media (max-width: 768px) {
-  .portal-nav__links { display: none; }
   .section-nav { padding: 0 12px; }
   .section-nav a { padding: 12px 14px; font-size: 12px; }
 }

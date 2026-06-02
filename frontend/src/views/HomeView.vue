@@ -11,7 +11,6 @@
       />
       <div class="hero__bg" :style="{ backgroundImage: 'url(/img/swan-hero.png)' }"></div>
       <div class="hero__veil-left"></div>
-      <div class="hero__nlmk-badge">НЛМК</div>
       <div class="hero-content">
         <div class="hero-text">
           <h1>Зелёная книга<br>ПАО &laquo;НЛМК&raquo;</h1>
@@ -339,21 +338,6 @@ onMounted(async () => {
   background: linear-gradient(to right, rgba(17,52,55,0.55) 0%, rgba(27,77,79,0.25) 30%, rgba(27,77,79,0.05) 55%, transparent 75%);
   z-index: 3;
   pointer-events: none;
-}
-.hero__nlmk-badge {
-  position: absolute;
-  top: 24px; right: 28px;
-  z-index: 10;
-  width: 56px; height: 40px;
-  border: 2px solid rgba(255,255,255,0.6);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: rgba(255,255,255,0.8);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 1px;
 }
 .hero-content {
   position: relative;

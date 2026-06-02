@@ -230,7 +230,7 @@ async function register() {
 
 <style scoped>
 .login-page {
-  min-height: 100vh;
+  min-height: calc(100vh - 105px);
   display: flex;
   align-items: center;
   justify-content: center;
