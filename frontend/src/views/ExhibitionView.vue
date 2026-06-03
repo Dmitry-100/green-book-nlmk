@@ -12,7 +12,7 @@
       <div class="exhibition-section__header">
         <div>
           <h2>Фотоистории</h2>
-          <p>22 фотографии из подборки «Фото птицы НЛМК 2025» с авторскими подписями из выставочного файла.</p>
+          <p>22 истории из подборки «Фото птицы НЛМК 2025» с авторскими подписями из выставочного файла. Материалы опубликованы с согласия авторов.</p>
         </div>
         <router-link to="/observe" class="exhibition-section__action">Добавить наблюдение</router-link>
       </div>
@@ -24,7 +24,14 @@
           class="exhibition-card"
           :class="{ 'exhibition-card--wide': item.wide }"
         >
-          <img :src="item.image" :alt="item.alt" loading="lazy" decoding="async" />
+          <img
+            :src="item.image"
+            :alt="item.alt"
+            loading="lazy"
+            decoding="async"
+            draggable="false"
+            @contextmenu.prevent
+          />
           <div class="exhibition-card__body">
             <div class="exhibition-card__meta">
               <span>Фото №{{ item.photoNumber }}</span>

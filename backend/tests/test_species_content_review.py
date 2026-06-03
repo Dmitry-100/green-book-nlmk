@@ -1,7 +1,17 @@
+from datetime import datetime, UTC
 from pathlib import Path
 
+from geoalchemy2.elements import WKTElement
+
+from app.models.observation import Observation, ObservationStatus, ObsMedia
 from app.models.species import Species, SpeciesCategory, SpeciesGroup
-from app.seed.content_review_20260417 import AUDIO_UPDATES, apply_content_review
+from app.models.user import User, UserRole
+from app.seed.content_review_20260417 import (
+    AUDIO_UPDATES,
+    UNSAFE_XENO_AUDIO_NAMES,
+    apply_content_review,
+)
+from app.seed.media_rights_safe_20260603 import apply_media_rights_safe
 
 
 MEDIA_ROOT = Path(__file__).resolve().parents[1] / "media"
@@ -281,7 +291,7 @@ def test_content_review_applies_expert_catalog_delta(db):
 
     blue_underwing = _by_name(db, "Голубая ленточница")
     assert blue_underwing is not None
-    assert blue_underwing.photo_urls == ["/api/media/species-pdf/page20_img06.png"]
+    assert blue_underwing.photo_urls is None
 
     grass_snake = _by_name(db, "Обыкновенный уж")
     assert grass_snake is not None
@@ -320,31 +330,28 @@ def test_content_review_applies_expert_catalog_delta(db):
 
     hedgehog = _by_name(db, "Ёж обыкновенный")
     assert hedgehog is not None
-    assert hedgehog.audio_url == "/api/media/species-audio/erinaceus-europaeus.ogg"
+    assert hedgehog.audio_url.startswith("https://upload.wikimedia.org/")
+    assert "NonCommercial" not in hedgehog.audio_license
+    assert "NoDerivs" not in hedgehog.audio_license
 
-    expected_new_audio = {
-        "Беркут": "aquila-chrysaetos.ogg",
-        "Белоспинный дятел": "dendrocopos-leucotos.ogg",
+    expected_local_audio = {
         "Большая белая цапля": "ardea-alba.ogg",
         "Волчек (малая выпь)": "ixobrychus-minutus.mp3",
         "Козодой": "caprimulgus-europaeus.mp3",
-        "Сокол сапсан": "falco-peregrinus.ogg",
-        "Травяная лягушка": "rana-temporaria.ogg",
-        "Барсук": "meles-meles.ogg",
-        "Лисица обыкновенная": "vulpes-vulpes.ogg",
     }
-    for name_ru, filename in expected_new_audio.items():
+    for name_ru, filename in expected_local_audio.items():
         species = _by_name(db, name_ru)
         assert species is not None
         assert species.audio_url == f"/api/media/species-audio/{filename}"
 
-    golden_eagle = _by_name(db, "Беркут")
-    assert golden_eagle is not None
-    assert golden_eagle.audio_source == "Xeno-canto XC1045328 / Lars Edenius"
-    assert (
-        golden_eagle.audio_license
-        == "Creative Commons Attribution-NonCommercial-ShareAlike 4.0"
-    )
+    for name_ru in UNSAFE_XENO_AUDIO_NAMES:
+        species = _by_name(db, name_ru)
+        if species is None:
+            continue
+        assert species.audio_url.startswith("https://upload.wikimedia.org/"), name_ru
+        assert "Xeno-canto" not in species.audio_source
+        assert "NonCommercial" not in species.audio_license
+        assert "NoDerivs" not in species.audio_license
 
     expected_latin_names = {
         "Балобан": "Falco cherrug",
@@ -374,7 +381,123 @@ def test_content_review_audio_assets_are_local_and_versioned():
     assert AUDIO_UPDATES
     for name_ru, values in AUDIO_UPDATES.items():
         audio_url = values["audio_url"]
-        assert audio_url.startswith("/api/media/species-audio/"), name_ru
-        audio_path = MEDIA_ROOT / audio_url.removeprefix("/api/media/")
-        assert audio_path.is_file(), name_ru
-        assert audio_path.stat().st_size > 0, name_ru
+        if audio_url.startswith("/api/media/species-audio/"):
+            audio_path = MEDIA_ROOT / audio_url.removeprefix("/api/media/")
+            assert audio_path.is_file(), name_ru
+            assert audio_path.stat().st_size > 0, name_ru
+        else:
+            assert audio_url.startswith("https://upload.wikimedia.org/"), name_ru
+            assert "NonCommercial" not in values["audio_license"], name_ru
+            assert "NoDerivs" not in values["audio_license"], name_ru
+
+
+def test_media_rights_backfill_replaces_unverified_catalog_media(db):
+    _add_species(
+        db,
+        name_ru="Ковыль перистый",
+        name_latin="Stipa pennata",
+        group=SpeciesGroup.plants,
+        category=SpeciesCategory.rare,
+        photo_urls=["/api/media/species-pdf/page11_img00.png"],
+    )
+    _add_species(
+        db,
+        name_ru="Ёж обыкновенный",
+        name_latin="Erinaceus europaeus",
+        group=SpeciesGroup.mammals,
+        category=SpeciesCategory.typical,
+    )
+    _add_species(
+        db,
+        name_ru="Большая синица",
+        name_latin="Parus major",
+        group=SpeciesGroup.birds,
+        category=SpeciesCategory.synanthropic,
+    )
+    db.commit()
+
+    apply_content_review(db)
+    media_summary = apply_media_rights_safe(db)
+    db.commit()
+
+    kovyl = _by_name(db, "Ковыль перистый")
+    assert kovyl.photo_urls == ["/api/media/species/stipa-pennata.jpg"]
+
+    hedgehog = _by_name(db, "Ёж обыкновенный")
+    assert hedgehog.photo_urls == ["/api/media/species/erinaceus-europaeus.jpg"]
+    assert hedgehog.audio_url is None
+    assert hedgehog.audio_license is None
+
+    great_tit = _by_name(db, "Большая синица")
+    assert great_tit.photo_urls == ["/api/media/species/parus-major.jpg"]
+    assert great_tit.audio_url == "/api/media/species-audio/parus-major.ogg"
+    assert media_summary["photo_updated"] >= 1
+    assert media_summary["audio_disabled"] >= 1
+
+
+def test_media_rights_backfill_removes_legacy_observation_media(db):
+    user = User(
+        external_id="legacy-media-user",
+        login="legacy_media_user",
+        display_name="Legacy media user",
+        role=UserRole.employee,
+    )
+    species = _add_species(
+        db,
+        name_ru="Большая синица",
+        name_latin="Parus major",
+        group=SpeciesGroup.birds,
+        category=SpeciesCategory.synanthropic,
+    )
+    db.add(user)
+    db.flush()
+    now = datetime.now(UTC).replace(tzinfo=None)
+    observation = Observation(
+        author_id=user.id,
+        species_id=species.id,
+        group=species.group.value,
+        observed_at=now,
+        location_point=WKTElement("POINT(39.60 52.59)", srid=4326),
+        status=ObservationStatus.confirmed,
+        safety_checked=True,
+        content_notice_accepted_at=now,
+    )
+    old_observation = Observation(
+        author_id=user.id,
+        species_id=species.id,
+        group=species.group.value,
+        observed_at=now,
+        location_point=WKTElement("POINT(39.60 52.59)", srid=4326),
+        status=ObservationStatus.confirmed,
+        safety_checked=True,
+    )
+    db.add_all([observation, old_observation])
+    db.flush()
+    legacy_media = ObsMedia(
+        observation_id=observation.id,
+        s3_key="species-pdf/page12_img11.png",
+        thumbnail_key="species-pdf/page12_img11.png",
+        mime_type="image/png",
+    )
+    safe_media = ObsMedia(
+        observation_id=observation.id,
+        s3_key="observations/safe.jpg",
+        thumbnail_key="thumbnails/safe.jpg",
+        mime_type="image/jpeg",
+    )
+    old_unconsented_media = ObsMedia(
+        observation_id=old_observation.id,
+        s3_key="observations/old-unconsented.jpg",
+        thumbnail_key="thumbnails/old-unconsented.jpg",
+        mime_type="image/jpeg",
+    )
+    db.add_all([legacy_media, safe_media, old_unconsented_media])
+    db.commit()
+
+    media_summary = apply_media_rights_safe(db)
+    db.commit()
+
+    remaining_keys = {row.s3_key for row in db.query(ObsMedia).all()}
+    assert remaining_keys == {"observations/safe.jpg"}
+    assert media_summary["legacy_observation_media_deleted"] == 1
+    assert media_summary["unconsented_observation_media_deleted"] == 1

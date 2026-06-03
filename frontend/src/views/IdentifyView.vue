@@ -13,7 +13,8 @@
       <h2>Шаг 1: Что вы видели?</h2>
       <div class="id-group-selector">
         <div v-for="g in groups" :key="g.value" class="id-group-card" @click="selectGroup(g.value)"
-             :style="{ backgroundImage: `linear-gradient(to top, rgba(27,77,79,0.9) 0%, rgba(27,77,79,0.3) 60%, transparent 100%), url(${g.photo})` }">
+             :style="{ backgroundImage: `linear-gradient(to top, rgba(27,77,79,0.9) 0%, rgba(27,77,79,0.3) 60%, transparent 100%), url(${g.photo})` }"
+             >
           <div class="id-group-card__content">
             <div class="id-group-card__label">{{ g.label }}</div>
           </div>
@@ -67,6 +68,7 @@
 import { ref } from 'vue'
 import { getCached } from '../api/client'
 import PageHero from '../components/PageHero.vue'
+import { mediaRightsGroupCovers } from '../data/mediaRightsGenerated'
 
 const step = ref(1)
 const selectedGroup = ref('')
@@ -75,12 +77,12 @@ const suggestions = ref<any[]>([])
 const selectedSpecies = ref<any>(null)
 
 const groups = [
-  { value: 'plants', icon: '🌿', label: 'Растение', photo: '/api/media/species-pdf/page05_img02.png' },
-  { value: 'fungi', icon: '🍄', label: 'Гриб', photo: '/api/media/species-pdf/page12_img00.png' },
-  { value: 'insects', icon: '🐛', label: 'Насекомое', photo: '/api/media/species-pdf/page20_img04.png' },
-  { value: 'herpetofauna', icon: '🐍', label: 'Герпетофауна', photo: '/api/media/species-pdf/page21_img03.png' },
-  { value: 'birds', icon: '🐦', label: 'Птица', photo: '/api/media/species-pdf/page23_img07.png' },
-  { value: 'mammals', icon: '🦔', label: 'Млекопитающее', photo: '/api/media/species-pdf/page29_img00.png' },
+  { value: 'plants', icon: '🌿', label: 'Растение', photo: mediaRightsGroupCovers.plants },
+  { value: 'fungi', icon: '🍄', label: 'Гриб', photo: mediaRightsGroupCovers.fungi },
+  { value: 'insects', icon: '🐛', label: 'Насекомое', photo: mediaRightsGroupCovers.insects },
+  { value: 'herpetofauna', icon: '🐍', label: 'Герпетофауна', photo: mediaRightsGroupCovers.herpetofauna },
+  { value: 'birds', icon: '🐦', label: 'Птица', photo: mediaRightsGroupCovers.birds },
+  { value: 'mammals', icon: '🦔', label: 'Млекопитающее', photo: mediaRightsGroupCovers.mammals },
 ]
 
 async function selectGroup(group: string) {

@@ -50,6 +50,11 @@
     <main>
       <router-view />
     </main>
+
+    <footer class="portal-footer">
+      <router-link to="/materials-sources">Источники материалов</router-link>
+      <span>Фото и аудио публикуются с учетом авторства и условий лицензий.</span>
+    </footer>
   </div>
 </template>
 
@@ -164,5 +169,23 @@ watch(
     padding: 0 10px;
     font-size: 11px;
   }
+}
+
+.portal-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px 16px;
+  padding: 22px 24px 28px;
+  border-top: 1px solid rgba(214,224,227,0.9);
+  background: #FAFBFC;
+  color: var(--slate-mid);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.portal-footer a {
+  color: var(--teal);
+  font-weight: 800;
 }
 </style>

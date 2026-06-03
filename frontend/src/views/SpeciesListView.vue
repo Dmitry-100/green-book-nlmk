@@ -82,19 +82,36 @@ const categoryFilter = ref('')
 const hasAudio = ref(false)
 let debounceTimer: ReturnType<typeof setTimeout>
 const SPECIES_LIST_CACHE_TTL_MS = 60 * 1000
+const SPECIES_LIST_PAGE_SIZE = 200
 
 async function fetchSpecies() {
   loading.value = true
-  const params: any = { limit: 200 }
+  const params: any = { limit: SPECIES_LIST_PAGE_SIZE }
   if (groupFilter.value) params.group = groupFilter.value
   if (categoryFilter.value) params.category = categoryFilter.value
   if (search.value && search.value.length >= 2) params.search = search.value
   if (hasAudio.value) params.has_audio = true
-  const cacheKey = `species:list:${params.group || ''}:${params.category || ''}:${params.search || ''}:${params.has_audio || ''}:${params.limit}`
+  const cacheKeyBase = `species:list:${params.group || ''}:${params.category || ''}:${params.search || ''}:${params.has_audio || ''}:${params.limit}`
   try {
-    const { data } = await getCached('/species', { params }, SPECIES_LIST_CACHE_TTL_MS, cacheKey)
-    species.value = data.items || []
-    total.value = data.total || 0
+    const { data } = await getCached('/species', { params }, SPECIES_LIST_CACHE_TTL_MS, `${cacheKeyBase}:0`)
+    const items = data.items || []
+    const totalItems = data.total || items.length
+
+    while (items.length < totalItems) {
+      const skip = items.length
+      const { data: nextData } = await getCached(
+        '/species',
+        { params: { ...params, skip } },
+        SPECIES_LIST_CACHE_TTL_MS,
+        `${cacheKeyBase}:${skip}`
+      )
+      const nextItems = nextData.items || []
+      if (!nextItems.length) break
+      items.push(...nextItems)
+    }
+
+    species.value = items
+    total.value = totalItems
   } catch {
     species.value = []
     total.value = 0

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-label="Insects cover">
+  <rect width="1200" height="800" fill="#557d82"/>
+  <path d="M602 404c-92-158-217-214-376-168 28 149 151 233 369 254-158 75-226 168-205 279 145-4 224-96 237-276 62 167 157 244 286 232 5-137-88-213-279-230 191-34 302-126 335-276-161-24-284 38-367 185Z" fill="#e8d887" opacity=".9"/>
+  <ellipse cx="602" cy="474" rx="42" ry="122" fill="#213f43"/>
+  <circle cx="602" cy="330" r="43" fill="#213f43"/>
+  <path d="M572 318c-67-83-129-119-187-108M632 318c69-80 132-113 190-100" fill="none" stroke="#213f43" stroke-width="14" stroke-linecap="round"/>
+</svg>

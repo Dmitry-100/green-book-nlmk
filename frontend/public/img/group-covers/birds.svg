@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-label="Birds cover">
+  <rect width="1200" height="800" fill="#6f9392"/>
+  <path d="M222 456c129-116 278-172 447-168 129 3 228 47 297 131-151-27-276-7-375 61-111 76-234 97-369 62 40-16 73-45 100-86Z" fill="#eff5f2"/>
+  <path d="M405 356c-62-102-44-191 52-267 1 91 40 168 117 230" fill="none" stroke="#eff5f2" stroke-width="44" stroke-linecap="round"/>
+  <circle cx="487" cy="159" r="12" fill="#233f42"/>
+  <path d="M508 162c38 7 68 24 91 51-42 5-76-4-101-26Z" fill="#233f42"/>
+</svg>

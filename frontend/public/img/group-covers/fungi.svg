@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-label="Fungi cover">
+  <rect width="1200" height="800" fill="#5d7f7a"/>
+  <path d="M0 620c168-72 319-72 454 0 108 57 217 58 328 4 145-70 284-65 418 16v160H0z" fill="#264d4a" opacity=".55"/>
+  <path d="M405 613c11-80 20-154 27-222h176c5 76 14 150 27 222 9 49-29 94-79 94H484c-50 0-86-45-79-94Z" fill="#f0eee2"/>
+  <path d="M262 385c55-134 155-201 300-201s245 67 300 201c-160 46-360 46-600 0Z" fill="#a95f5c"/>
+  <g fill="#f7eee8" opacity=".92">
+    <circle cx="403" cy="315" r="24"/>
+    <circle cx="544" cy="260" r="18"/>
+    <circle cx="690" cy="333" r="28"/>
+    <circle cx="776" cy="278" r="16"/>
+  </g>
+</svg>

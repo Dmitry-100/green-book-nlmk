@@ -17,7 +17,6 @@ from app.models.observation import Observation
 from app.models.species import Species, SpeciesCategory, SpeciesGroup
 
 RED_BOOK_STATUS = "Красная книга Липецкой области"
-BLUE_UNDERWING_PHOTO = "/api/media/species-pdf/page20_img06.png"
 
 
 CATALOG_UPSERTS: list[dict[str, Any]] = [
@@ -31,7 +30,6 @@ CATALOG_UPSERTS: list[dict[str, Any]] = [
             "Многолетний степной злак с длинными перистыми остями. "
             "На промышленной площадке требует отдельного внимания как краснокнижный вид."
         ),
-        "photo_urls": ["/api/media/species-pdf/page11_img00.png"],
     },
     {
         "name_ru": "Тополь черный",
@@ -136,7 +134,6 @@ CATALOG_UPSERTS: list[dict[str, Any]] = [
         "category": "red_book",
         "conservation_status": RED_BOOK_STATUS,
         "description": "Крупная ночная бабочка с синими перевязями на задних крыльях.",
-        "photo_urls": [BLUE_UNDERWING_PHOTO],
     },
     {
         "name_ru": "Мелангрия галатея",
@@ -145,7 +142,6 @@ CATALOG_UPSERTS: list[dict[str, Any]] = [
         "category": "red_book",
         "conservation_status": RED_BOOK_STATUS,
         "description": "Контрастная чёрно-белая бархатница лугов и опушек.",
-        "photo_urls": ["/api/media/species-pdf/page20_img05.png"],
         "aliases": ["Галатея"],
     },
     {
@@ -160,7 +156,6 @@ CATALOG_UPSERTS: list[dict[str, Any]] = [
             "и сообщите экологу."
         ),
         "do_dont_rules": "Не приближайтесь и не пытайтесь поймать. Ядовита.",
-        "photo_urls": ["/api/media/species-pdf/page21_img01.png"],
     },
     {
         "name_ru": "Грач",
@@ -756,12 +751,11 @@ XENO_AUDIO_SOURCE_OVERRIDES = {
     "Лисица обыкновенная": ("1100142", "Thijs Calu", "Creative Commons Attribution-NonCommercial-ShareAlike 4.0"),
 }
 
-for name_ru, filename in LOCAL_AUDIO_FILES.items():
-    AUDIO_UPDATES[name_ru]["audio_url"] = f"/api/media/species-audio/{filename}"
+UNSAFE_XENO_AUDIO_NAMES = set(XENO_AUDIO_SOURCE_OVERRIDES)
 
-for name_ru, (xc_id, recordist, license_name) in XENO_AUDIO_SOURCE_OVERRIDES.items():
-    AUDIO_UPDATES[name_ru]["audio_source"] = f"Xeno-canto XC{xc_id} / {recordist}"
-    AUDIO_UPDATES[name_ru]["audio_license"] = license_name
+for name_ru, filename in LOCAL_AUDIO_FILES.items():
+    if name_ru not in UNSAFE_XENO_AUDIO_NAMES:
+        AUDIO_UPDATES[name_ru]["audio_url"] = f"/api/media/species-audio/{filename}"
 
 
 def _species_by_name(db: Session, name_ru: str) -> Species | None:

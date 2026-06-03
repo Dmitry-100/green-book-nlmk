@@ -64,6 +64,11 @@ const router = createRouter({
           component: () => import('../views/HelpView.vue'),
         },
         {
+          path: 'materials-sources',
+          name: 'materials-sources',
+          component: () => import('../views/MaterialsSourcesView.vue'),
+        },
+        {
           path: 'admin',
           name: 'admin',
           component: () => import('../views/AdminView.vue'),

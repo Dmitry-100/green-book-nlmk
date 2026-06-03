@@ -77,6 +77,19 @@ def test_species_audio_media_is_public_from_disk(client, tmp_path, monkeypatch):
     assert response.status_code == 200
     assert response.content == b"OggS"
     assert response.headers["content-type"].startswith("audio/ogg")
+    assert response.headers["content-disposition"] == "inline"
+    assert response.headers["x-content-type-options"] == "nosniff"
+
+
+def test_legacy_species_pdf_media_is_disabled_by_default(client, tmp_path, monkeypatch):
+    monkeypatch.setattr(media_serve_router, "MEDIA_DIR", tmp_path)
+    species_pdf_dir = tmp_path / "species-pdf"
+    species_pdf_dir.mkdir()
+    (species_pdf_dir / "legacy.png").write_bytes(b"PNG")
+
+    response = client.get("/api/media/species-pdf/legacy.png")
+
+    assert response.status_code == 404
 
 
 def test_private_observation_media_is_hidden_for_public(client, db, monkeypatch):

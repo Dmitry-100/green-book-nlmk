@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-label="Plants cover">
+  <rect width="1200" height="800" fill="#426f68"/>
+  <path d="M0 612c130-62 256-68 379-18 140 57 279 56 417-4 149-65 284-59 404 17v193H0z" fill="#234d49" opacity=".54"/>
+  <g fill="none" stroke="#e8f0d8" stroke-width="20" stroke-linecap="round">
+    <path d="M590 680V205"/>
+    <path d="M590 430c-105-82-193-94-266-38 79 73 168 86 266 38Z"/>
+    <path d="M590 332c102-92 196-113 282-63-72 83-166 104-282 63Z"/>
+    <path d="M590 545c110-68 204-66 282 5-88 55-182 53-282-5Z"/>
+  </g>
+</svg>

@@ -12,13 +12,50 @@
     <div class="detail-page__content">
     <div class="detail-header">
       <div class="detail-gallery">
-        <div class="detail-gallery__main" :style="imgStyle">
-          <div class="detail-gallery__no-photo" v-if="!species.photo_urls?.length">{{ groupIcon }}</div>
+        <div class="detail-gallery__main" :class="{ 'detail-gallery__main--with-photo': primaryPhotoUrl }">
+          <img
+            v-if="primaryPhotoUrl"
+            class="detail-gallery__photo"
+            :src="primaryPhotoUrl"
+            :alt="species.name_ru"
+            draggable="false"
+          />
+          <div class="detail-gallery__no-photo" v-else>{{ groupIcon }}</div>
           <div class="detail-gallery__badges">
             <span class="detail-badge detail-badge--status">{{ groupLabel }}</span>
             <span v-if="species.conservation_status" class="detail-badge detail-badge--redbook">{{ species.conservation_status }}</span>
             <span v-if="species.is_poisonous" class="detail-badge detail-badge--poison">Ядовито</span>
           </div>
+        </div>
+        <div v-if="photoAttribution" class="media-credit">
+          <div>
+            Фото:
+            <a
+              v-if="sourceHref(photoAttribution)"
+              :href="sourceHref(photoAttribution)"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {{ photoAttribution.author || 'источник' }}
+            </a>
+            <span v-else>{{ photoAttribution.author || 'источник' }}</span>
+            <span v-if="photoAttribution.license">
+              ·
+              <a
+                v-if="photoAttribution.licenseUrl"
+                :href="photoAttribution.licenseUrl"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {{ photoAttribution.license }}
+              </a>
+              <span v-else>{{ photoAttribution.license }}</span>
+            </span>
+          </div>
+          <div v-if="photoAttribution.changeNote" class="media-credit__note">{{ photoAttribution.changeNote }}</div>
+          <router-link :to="{ name: 'materials-sources', query: { q: species.name_ru } }">
+            Все источники
+          </router-link>
         </div>
       </div>
       <div class="detail-info">
@@ -53,13 +90,45 @@
               <div class="species-audio__title">{{ species.audio_title || species.name_ru }}</div>
             </div>
           </div>
-          <audio class="species-audio__player" controls preload="none" :src="species.audio_url">
+          <audio
+            class="species-audio__player"
+            controls
+            controlsList="noplaybackrate"
+            preload="none"
+            :src="species.audio_url"
+          >
             Ваш браузер не поддерживает воспроизведение аудио.
           </audio>
           <div class="species-audio__source">
-            <span v-if="species.audio_source">{{ species.audio_source }}</span>
-            <span v-if="species.audio_source && species.audio_license"> · </span>
-            <span v-if="species.audio_license">{{ species.audio_license }}</span>
+            <template v-if="audioAttribution">
+              <span>Источник: </span>
+              <a
+                v-if="sourceHref(audioAttribution)"
+                :href="sourceHref(audioAttribution)"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {{ audioAttribution.author || 'аудиозапись' }}
+              </a>
+              <span v-else>{{ audioAttribution.author || 'аудиозапись' }}</span>
+              <span v-if="audioAttribution.license">
+                ·
+                <a
+                  v-if="audioAttribution.licenseUrl"
+                  :href="audioAttribution.licenseUrl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {{ audioAttribution.license }}
+                </a>
+                <span v-else>{{ audioAttribution.license }}</span>
+              </span>
+            </template>
+            <template v-else>
+              <span v-if="species.audio_source">{{ species.audio_source }}</span>
+              <span v-if="species.audio_source && species.audio_license"> · </span>
+              <span v-if="species.audio_license">{{ species.audio_license }}</span>
+            </template>
           </div>
         </div>
         <div v-if="species.do_dont_rules" class="detail-rules">
@@ -111,6 +180,7 @@
             v-if="observation.media?.length"
             class="species-observation-card__thumb"
             :style="{ backgroundImage: `url(${observationPreviewUrl(observation)})` }"
+            @contextmenu.prevent
           ></div>
           <div v-else class="species-observation-card__icon">{{ groupIcon }}</div>
           <div class="species-observation-card__body">
@@ -154,6 +224,7 @@ import { buildSpeciesEditorialSections } from '../utils/speciesEditorialSections
 import { buildObservationMediaUrl } from '../services/observationMedia'
 import PageHero from '../components/PageHero.vue'
 import EmptyState from '../components/EmptyState.vue'
+import { getMediaAttributionByUrl, type MediaAttribution } from '../data/mediaAttributionsGenerated'
 
 const route = useRoute()
 interface SpeciesDetail {
@@ -214,7 +285,9 @@ const categoryLabel = computed(() => {
   const category = species.value?.category
   return category ? CATEGORY_LABELS[category] || '' : ''
 })
-const imgStyle = computed(() => species.value?.photo_urls?.length ? { backgroundImage: `url(${species.value.photo_urls[0]})` } : {})
+const primaryPhotoUrl = computed(() => species.value?.photo_urls?.[0] || '')
+const photoAttribution = computed(() => getMediaAttributionByUrl(species.value?.photo_urls?.[0]))
+const audioAttribution = computed(() => getMediaAttributionByUrl(species.value?.audio_url))
 const editorialSections = computed(() => species.value ? buildSpeciesEditorialSections(species.value) : [])
 const observeLink = computed(() => species.value ? `/observe?species=${species.value.id}&group=${species.value.group}` : '/observe')
 const hasMoreObservations = computed(() => (
@@ -258,6 +331,12 @@ function observationPreviewUrl(observation: SpeciesObservation): string {
   return buildObservationMediaUrl(media.thumbnail_key || media.s3_key)
 }
 
+function sourceHref(item: MediaAttribution): string {
+  if (item.sourcePage?.startsWith('http')) return item.sourcePage
+  if (item.sourceUrl?.startsWith('http')) return item.sourceUrl
+  return ''
+}
+
 async function fetchSpeciesObservations(reset = false) {
   if (!species.value) return
   observationsLoading.value = true
@@ -299,13 +378,38 @@ onMounted(async () => {
 .detail-page__content { max-width: 1200px; margin: 0 auto; padding: 24px 32px 32px; }
 .detail-header { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
 .detail-gallery { border-radius: 20px; overflow: hidden; }
-.detail-gallery__main { width: 100%; height: 380px; background-size: cover; background-position: center; position: relative; background-color: #D6E0E3; }
+.detail-gallery__main {
+  width: 100%;
+  height: 380px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(255,255,255,0.96), rgba(232,238,240,0.96) 58%, rgba(214,224,227,0.96) 100%);
+  overflow: hidden;
+}
+.detail-gallery__main--with-photo { background-color: #E7EEF0; }
+.detail-gallery__photo {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 10px;
+  display: block;
+  object-fit: contain;
+  object-position: center;
+}
 .detail-gallery__no-photo { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; font-size: 80px; opacity: 0.3; }
 .detail-gallery__badges { position: absolute; top: 16px; left: 16px; display: flex; gap: 8px; }
 .detail-badge { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; backdrop-filter: blur(8px); }
 .detail-badge--status { background: rgba(42,122,110,0.85); color: white; }
 .detail-badge--redbook { background: rgba(229,57,53,0.85); color: white; }
 .detail-badge--poison { background: rgba(255,152,0,0.85); color: white; }
+.media-credit { padding: 12px 14px; background: #F3F7F8; border: 1px solid rgba(42,122,110,0.14); border-top: 0; color: #4A6572; font-size: 12px; line-height: 1.55; }
+.media-credit a,
+.species-audio__source a { color: #2A7A6E; font-weight: 800; overflow-wrap: anywhere; }
+.media-credit__note { margin-top: 4px; color: #6B7F87; }
+.media-credit > a { display: inline-flex; margin-top: 6px; }
 .detail-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px; }
 .meta-item { background: #E8EEF0; padding: 14px 16px; border-radius: 6px; }
 .meta-item__label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #8FA5AB; margin-bottom: 4px; }

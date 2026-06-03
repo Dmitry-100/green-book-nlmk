@@ -97,6 +97,7 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import { getCached } from '../api/client'
 import { loadYmaps } from '../services/ymapsLoader'
 import PageHero from '../components/PageHero.vue'
+import { mediaRightsGroupCovers } from '../data/mediaRightsGenerated'
 
 const stats = ref<any>({
   shannon_index: 0, total_species_in_catalog: 0, confirmed_species: 0,
@@ -114,12 +115,12 @@ const groupLabels: Record<string, string> = {
   herpetofauna: 'Герпетофауна', birds: 'Птицы', mammals: 'Млекопитающие',
 }
 const groupPhotos: Record<string, string> = {
-  plants: '/api/media/species-pdf/page05_img02.png',
-  fungi: '/api/media/species-pdf/page12_img00.png',
-  insects: '/api/media/species-pdf/page20_img04.png',
-  herpetofauna: '/api/media/species-pdf/page21_img03.png',
-  birds: '/api/media/species-pdf/page23_img07.png',
-  mammals: '/api/media/species-pdf/page29_img00.png',
+  plants: mediaRightsGroupCovers.plants,
+  fungi: mediaRightsGroupCovers.fungi,
+  insects: mediaRightsGroupCovers.insects,
+  herpetofauna: mediaRightsGroupCovers.herpetofauna,
+  birds: mediaRightsGroupCovers.birds,
+  mammals: mediaRightsGroupCovers.mammals,
 }
 const monthNames = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек']
 

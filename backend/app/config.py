@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     media_thumbnail_size: int = Field(default=400, ge=64, le=2048)
     media_async_processing_enabled: bool = True
     media_direct_upload_enabled: bool = True
+    serve_legacy_species_pdf_media: bool = False
     media_processing_batch_size: int = Field(default=20, ge=1, le=500)
     media_processing_max_attempts: int = Field(default=3, ge=1, le=20)
     media_processing_retry_backoff_seconds: int = Field(default=30, ge=1, le=3600)
@@ -133,6 +134,8 @@ class Settings(BaseSettings):
             problems.append("CORS_ORIGINS cannot contain wildcard in non-development")
         if self.media_direct_upload_enabled:
             problems.append("MEDIA_DIRECT_UPLOAD_ENABLED must be false outside development")
+        if self.serve_legacy_species_pdf_media:
+            problems.append("SERVE_LEGACY_SPECIES_PDF_MEDIA must be false outside development")
         if self.bootstrap_admin_login and not self.bootstrap_admin_password:
             problems.append("BOOTSTRAP_ADMIN_PASSWORD is required when BOOTSTRAP_ADMIN_LOGIN is set")
         if self.bootstrap_admin_password and len(self.bootstrap_admin_password) < 12:

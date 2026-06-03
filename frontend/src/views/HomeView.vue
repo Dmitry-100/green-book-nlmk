@@ -9,7 +9,7 @@
         :swirl="0.65"
         :speed="0.5"
       />
-      <div class="hero__bg" :style="{ backgroundImage: 'url(/img/swan-hero.png)' }"></div>
+      <div class="hero__bg" :style="{ backgroundImage: `url(${mediaRightsHeroImage})` }"></div>
       <div class="hero__veil-left"></div>
       <div class="hero-content">
         <div class="hero-text">
@@ -176,6 +176,7 @@
             class="news-item__thumb"
             v-if="o.media?.length"
             :style="{ backgroundImage: `url(/api/media/${observationPreviewMediaKey(o)})` }"
+            @contextmenu.prevent
           ></div>
           <div class="news-item__icon" v-else>{{ groupIcon(o.group) }}</div>
           <div class="news-item__body">
@@ -198,6 +199,7 @@ import HeroShaderBackground from '../components/HeroShaderBackground.vue'
 import SectionAmbient from '../components/SectionAmbient.vue'
 import MarqueeStrip from '../components/MarqueeStrip.vue'
 import { useCountUp } from '../composables/useCountUp'
+import { mediaRightsGroupCovers, mediaRightsHeroImage } from '../data/mediaRightsGenerated'
 
 const stats = reactive({ species: 0, confirmed: 0, on_review: 0, total_obs: 0 })
 const statsSpecies = useCountUp(computed(() => stats.species))
@@ -213,12 +215,12 @@ const auth = useAuthStore()
 const DASHBOARD_CACHE_TTL_MS = 15 * 1000
 
 const groups = [
-  { value: 'plants', icon: '🌿', label: 'Растения', count: 0, photo: '/api/media/species-pdf/page05_img02.png' },
-  { value: 'fungi', icon: '🍄', label: 'Грибы', count: 0, photo: '/api/media/species-pdf/page12_img00.png' },
-  { value: 'insects', icon: '🐛', label: 'Насекомые', count: 0, photo: '/api/media/species-pdf/page20_img04.png' },
-  { value: 'birds', icon: '🐦', label: 'Птицы', count: 0, photo: '/api/media/species-pdf/page23_img07.png' },
-  { value: 'herpetofauna', icon: '🐍', label: 'Герпетофауна', count: 0, photo: '/api/media/species-pdf/page21_img03.png' },
-  { value: 'mammals', icon: '🦔', label: 'Млекопитающие', count: 0, photo: '/api/media/species-pdf/page29_img00.png' },
+  { value: 'plants', icon: '🌿', label: 'Растения', count: 0, photo: mediaRightsGroupCovers.plants },
+  { value: 'fungi', icon: '🍄', label: 'Грибы', count: 0, photo: mediaRightsGroupCovers.fungi },
+  { value: 'insects', icon: '🐛', label: 'Насекомые', count: 0, photo: mediaRightsGroupCovers.insects },
+  { value: 'birds', icon: '🐦', label: 'Птицы', count: 0, photo: mediaRightsGroupCovers.birds },
+  { value: 'herpetofauna', icon: '🐍', label: 'Герпетофауна', count: 0, photo: mediaRightsGroupCovers.herpetofauna },
+  { value: 'mammals', icon: '🦔', label: 'Млекопитающие', count: 0, photo: mediaRightsGroupCovers.mammals },
 ]
 
 const GROUP_ICONS: Record<string, string> = { plants: '🌿', fungi: '🍄', insects: '🐛', herpetofauna: '🐍', birds: '🐦', mammals: '🦔' }
@@ -325,9 +327,9 @@ onMounted(async () => {
   top: 0; right: 0; bottom: 0;
   width: 70%;
   background-size: cover;
-  background-position: center right;
+  background-position: center center;
   z-index: 2;
-  opacity: 0.5;
+  opacity: 0.58;
   mask-image: linear-gradient(to right, transparent 0%, rgba(0,0,0,0.4) 30%, black 60%);
   -webkit-mask-image: linear-gradient(to right, transparent 0%, rgba(0,0,0,0.4) 30%, black 60%);
   animation: heroBgReveal 1.2s ease-out;
@@ -805,7 +807,7 @@ onMounted(async () => {
   .hero-content { grid-template-columns: 1fr; padding: 32px 20px; }
   .hero h1 { font-size: 34px; }
   .hero-stats { grid-template-columns: repeat(2, 1fr); }
-  .hero__bg { width: 100%; opacity: 0.3; }
+  .hero__bg { width: 100%; opacity: 0.4; }
   .hero__gradient-left { width: 100%; }
   .quick-grid { grid-template-columns: repeat(3, 1fr); }
   .spotlight { grid-template-columns: 1fr; }

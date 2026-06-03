@@ -34,6 +34,22 @@ def test_production_config_validation_fails_on_insecure_defaults():
         settings.validate_production_config()
 
 
+def test_production_config_rejects_legacy_species_pdf_media():
+    settings = Settings(
+        app_env="production",
+        enable_dev_auth=False,
+        auth_secret_key="prod-secret",
+        minio_root_user="prod-minio-user",
+        minio_root_password="prod-minio-pass",
+        cors_origins=["https://greenbook.nlmk.example"],
+        media_direct_upload_enabled=False,
+        serve_legacy_species_pdf_media=True,
+    )
+
+    with pytest.raises(RuntimeError, match="SERVE_LEGACY_SPECIES_PDF_MEDIA"):
+        settings.validate_production_config()
+
+
 def test_settings_parse_csv_lists():
     settings = Settings(
         cors_origins="http://localhost:5173,http://localhost:4173",

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" role="img" aria-label="Herpetofauna cover">
+  <rect width="1200" height="800" fill="#67877f"/>
+  <path d="M130 546c96-80 205-105 326-74 76 19 148 19 216 0 151-43 283-13 398 91v143H130z" fill="#2e5550" opacity=".52"/>
+  <path d="M265 402c97-102 213-145 348-130 93 10 178 44 254 103 62 47 123 65 183 53-52 85-125 131-219 137-74 4-146-18-217-66-94-63-185-74-274-31-43 20-68 49-76 88-53-55-53-106 1-154Z" fill="#e0e7cf"/>
+  <circle cx="380" cy="376" r="18" fill="#203d3b"/>
+  <path d="M702 526c-78 44-161 44-249 0" fill="none" stroke="#8da36e" stroke-width="18" stroke-linecap="round"/>
+</svg>

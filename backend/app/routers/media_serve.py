@@ -22,6 +22,16 @@ AUDIO_CONTENT_TYPES = {
 }
 
 
+def _media_headers(cache_max_age: int) -> dict[str, str]:
+    return {
+        "Cache-Control": f"public, max-age={cache_max_age}",
+        "Content-Disposition": "inline",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "same-origin",
+        "Cross-Origin-Resource-Policy": "same-origin",
+    }
+
+
 def _serve_from_minio_or_disk(s3_key: str, fallback_dir: str, filename: str, content_type: str, cache_max_age: int = 86400):
     """Try MinIO first, fallback to local media/ directory."""
     # Try MinIO
@@ -31,14 +41,14 @@ def _serve_from_minio_or_disk(s3_key: str, fallback_dir: str, filename: str, con
         return StreamingResponse(
             obj["Body"],
             media_type=obj.get("ContentType", content_type),
-            headers={"Cache-Control": f"public, max-age={cache_max_age}"},
+            headers=_media_headers(cache_max_age),
         )
     except Exception:
         pass
     # Fallback to local file
     local_path = MEDIA_DIR / fallback_dir / filename
     if local_path.exists():
-        return FileResponse(local_path, media_type=content_type, headers={"Cache-Control": f"public, max-age={cache_max_age}"})
+        return FileResponse(local_path, media_type=content_type, headers=_media_headers(cache_max_age))
     raise HTTPException(status_code=404, detail="Photo not found")
 
 
@@ -80,6 +90,8 @@ def serve_species_photo(filename: str):
 
 @router.get("/species-pdf/{filename}")
 def serve_species_pdf_photo(filename: str):
+    if not settings.serve_legacy_species_pdf_media:
+        raise HTTPException(status_code=404, detail="Legacy species photo not found")
     return _serve_from_minio_or_disk(f"species-pdf/{filename}", "species-pdf", filename, "image/png")
 
 

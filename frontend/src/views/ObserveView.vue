@@ -17,7 +17,8 @@
                class="obs-group-card"
                :class="{ selected: form.group === g.value }"
                @click="form.group = g.value"
-               :style="{ backgroundImage: `linear-gradient(to top, rgba(27,77,79,0.88) 0%, rgba(27,77,79,0.3) 60%, transparent 100%), url(${g.photo})` }">
+               :style="{ backgroundImage: `linear-gradient(to top, rgba(27,77,79,0.88) 0%, rgba(27,77,79,0.3) 60%, transparent 100%), url(${g.photo})` }"
+               @contextmenu.prevent>
             <span class="obs-group-card__label">{{ g.label }}</span>
           </div>
         </div>
@@ -79,7 +80,7 @@
         <div class="form-section__title">Фото *</div>
         <div class="photo-upload-area">
           <div v-for="(photo, i) in photos" :key="i" class="photo-preview">
-            <img :src="photo.preview" alt="photo" />
+            <img :src="photo.preview" alt="photo" draggable="false" @contextmenu.prevent />
             <button class="photo-remove" @click.prevent="photos.splice(i, 1)">&times;</button>
           </div>
           <label class="photo-add">
@@ -161,6 +162,7 @@ import {
   fromDatetimeLocalInputValue,
   toDatetimeLocalInputValue,
 } from '../utils/datetimeLocal'
+import { mediaRightsGroupCovers } from '../data/mediaRightsGenerated'
 
 interface SpeciesOption {
   id: number
@@ -185,12 +187,12 @@ const querySpeciesIdRaw = Number(route.query.species)
 const querySpeciesId = Number.isFinite(querySpeciesIdRaw) && querySpeciesIdRaw > 0 ? querySpeciesIdRaw : null
 
 const groups = [
-  { value: 'plants', label: 'Растение', photo: '/api/media/species-pdf/page05_img02.png' },
-  { value: 'fungi', label: 'Гриб', photo: '/api/media/species-pdf/page12_img00.png' },
-  { value: 'insects', label: 'Насекомое', photo: '/api/media/species-pdf/page20_img04.png' },
-  { value: 'herpetofauna', label: 'Герпетофауна', photo: '/api/media/species-pdf/page21_img03.png' },
-  { value: 'birds', label: 'Птица', photo: '/api/media/species-pdf/page23_img07.png' },
-  { value: 'mammals', label: 'Млекопитающее', photo: '/api/media/species-pdf/page29_img00.png' },
+  { value: 'plants', label: 'Растение', photo: mediaRightsGroupCovers.plants },
+  { value: 'fungi', label: 'Гриб', photo: mediaRightsGroupCovers.fungi },
+  { value: 'insects', label: 'Насекомое', photo: mediaRightsGroupCovers.insects },
+  { value: 'herpetofauna', label: 'Герпетофауна', photo: mediaRightsGroupCovers.herpetofauna },
+  { value: 'birds', label: 'Птица', photo: mediaRightsGroupCovers.birds },
+  { value: 'mammals', label: 'Млекопитающее', photo: mediaRightsGroupCovers.mammals },
 ]
 
 const form = reactive({

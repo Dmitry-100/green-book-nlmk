@@ -126,6 +126,7 @@
             <div
               class="species-form-preview__image"
               :style="preview.photo_url ? { backgroundImage: `url(${preview.photo_url})` } : {}"
+              @contextmenu.prevent
             >
               <span v-if="!preview.photo_url">{{ groupIcon(preview.group) }}</span>
             </div>

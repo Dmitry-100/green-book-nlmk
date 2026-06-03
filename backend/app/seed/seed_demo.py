@@ -8,7 +8,7 @@ from geoalchemy2.elements import WKTElement
 
 from app.database import SessionLocal
 from app.models.user import User, UserRole
-from app.models.observation import Observation, ObsMedia, ObservationStatus
+from app.models.observation import Observation, ObservationStatus
 from app.models.species import Species
 from app.models.gamification import (
     Achievement, UserAchievement, UserPoints, SpeciesFirstDiscovery,
@@ -27,7 +27,6 @@ DEMO_OBSERVATIONS = [
         "observed_at": "2026-04-05T08:30:00",
         "lat": 52.59, "lon": 39.60,
         "comment": "Видел лося у пруда, шёл спокойно",
-        "media_key": "species-pdf/page29_img02.png",
     },
     {
         "species_latin": "Papilio machaon",
@@ -35,7 +34,6 @@ DEMO_OBSERVATIONS = [
         "observed_at": "2026-04-06T06:15:00",
         "lat": 52.591, "lon": 39.602,
         "comment": "Бабочка махаон на территории ЛПЦ-2, раннее утро",
-        "media_key": "species-pdf/page20_img04.png",
     },
     {
         "species_latin": "Amanita",
@@ -43,7 +41,6 @@ DEMO_OBSERVATIONS = [
         "observed_at": "2026-04-04T22:45:00",
         "lat": 52.588, "lon": 39.598,
         "comment": "Мухомор у забора, ночная смена",
-        "media_key": "species-pdf/page12_img11.png",
     },
 ]
 
@@ -106,14 +103,7 @@ def seed_demo():
         db.flush()
         print(f"  Created {len(obs_list)} observations")
 
-        # 3. Attach media
-        for i, o in enumerate(DEMO_OBSERVATIONS):
-            db.add(ObsMedia(
-                observation_id=obs_list[i].id,
-                s3_key=o["media_key"],
-                mime_type="image/png",
-            ))
-        print(f"  Attached {len(obs_list)} photos")
+        # 3. Demo observations intentionally have no bundled photos.
 
         # 4. Points
         for p in DEMO_POINTS:
