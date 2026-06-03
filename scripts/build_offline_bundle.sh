@@ -22,6 +22,7 @@ ALL_IMAGES=("$BACKEND_IMAGE" "$FRONTEND_IMAGE" "${SUPPORT_IMAGES[@]}")
 
 require_platform() {
   local image="$1"
+  local mode="${2:-strict}"
   local actual
   actual="$(docker image inspect --format '{{.Os}}/{{.Architecture}}{{if .Variant}}/{{.Variant}}{{end}}' "$image" 2>/dev/null || true)"
   if [[ -z "$actual" || "$actual" == "/" ]]; then
@@ -29,6 +30,10 @@ require_platform() {
     return 0
   fi
   if [[ "$actual" != "$PLATFORM" ]]; then
+    if [[ "$mode" == "soft" ]]; then
+      echo "Image $image reports platform '$actual'; docker save will enforce $PLATFORM."
+      return 0
+    fi
     echo "Image $image has platform '$actual', expected '$PLATFORM'." >&2
     exit 1
   fi
@@ -50,7 +55,7 @@ require_platform "$FRONTEND_IMAGE"
 for image in "${SUPPORT_IMAGES[@]}"; do
   echo "Pulling support image for $PLATFORM: $image"
   docker pull --platform "$PLATFORM" "$image"
-  require_platform "$image"
+  require_platform "$image" soft
 done
 
 echo "Saving images to offline tar..."
