@@ -340,6 +340,26 @@ docker compose exec backend python -m app.seed.seed_achievements
 | MinIO Console | http://localhost:9001 |
 | Login | http://localhost:5173/login |
 
+### Офлайн-развертывание без доступа к Docker Hub
+
+Если сервер в корпоративном контуре не может скачать образы из Docker Hub
+из-за TLS-инспекции, прокси или закрытого доступа в интернет, соберите пакет
+на машине с нормальным доступом:
+
+```bash
+./scripts/build_offline_bundle.sh
+```
+
+Для x86_64 GNU/Linux сервера используйте:
+
+```bash
+PLATFORM=linux/amd64 ./scripts/build_offline_bundle.sh
+```
+
+Архив появится в `dist/offline/`. На сервере его нужно распаковать,
+создать `.env` из `.env.offline.example` и запустить `./install.sh`.
+Подробная инструкция: `docs/runbooks/offline-deploy.md`.
+
 ---
 
 ## Эксплуатация
