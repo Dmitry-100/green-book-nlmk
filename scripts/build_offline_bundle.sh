@@ -24,6 +24,10 @@ require_platform() {
   local image="$1"
   local actual
   actual="$(docker image inspect --format '{{.Os}}/{{.Architecture}}{{if .Variant}}/{{.Variant}}{{end}}' "$image" 2>/dev/null || true)"
+  if [[ -z "$actual" || "$actual" == "/" ]]; then
+    echo "Image $image did not expose a concrete local platform; docker save will enforce $PLATFORM."
+    return 0
+  fi
   if [[ "$actual" != "$PLATFORM" ]]; then
     echo "Image $image has platform '$actual', expected '$PLATFORM'." >&2
     exit 1
@@ -50,7 +54,7 @@ for image in "${SUPPORT_IMAGES[@]}"; do
 done
 
 echo "Saving images to offline tar..."
-docker save -o "$BUNDLE_DIR/images/green-book-nlmk-images.tar" "${ALL_IMAGES[@]}"
+docker save --platform "$PLATFORM" -o "$BUNDLE_DIR/images/green-book-nlmk-images.tar" "${ALL_IMAGES[@]}"
 
 cp "$ROOT_DIR/docker-compose.offline.yml" "$BUNDLE_DIR/docker-compose.offline.yml"
 cp "$ROOT_DIR/scripts/install_offline_bundle.sh" "$BUNDLE_DIR/install.sh"
