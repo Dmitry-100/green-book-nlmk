@@ -780,7 +780,7 @@
     - frontend `npm audit`
 - [x] Добавить secret scanning для репозитория и workflow.
   - в `security-scans.yml` добавлен `gitleaks`.
-- [x] Завершить tightening dev/demo endpoint policy (без интеграции SSO).
+- [x] Завершить tightening dev/demo endpoint policy (без интеграции внешнего провайдера входа).
   - dev-auth остаётся строго под `APP_ENV=development && ENABLE_DEV_AUTH=true` (P23);
   - production config validation сохраняет блокирующие проверки небезопасных дефолтов.
 - [x] Провести ревизию MinIO/media access policy.
@@ -892,7 +892,7 @@
 - снижение риска незаметных регрессий в сложных workflow ветках.
 
 Риски:
-- рост времени тестового контура;
+- рост времени стендовых проверок;
 - потенциальная чувствительность тестов к будущей эволюции payload-контрактов.
 
 Критерии готовности:

@@ -136,9 +136,11 @@ class Observation(Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime)
     reviewer_comment: Mapped[str | None] = mapped_column(Text)
     sensitive_level: Mapped[SensitiveLevel] = mapped_column(
-        Enum(SensitiveLevel), default=SensitiveLevel.open
+        Enum(SensitiveLevel), default=SensitiveLevel.blurred
     )
     safety_checked: Mapped[bool] = mapped_column(Boolean, default=False)
+    content_notice_version: Mapped[str | None] = mapped_column(String(50))
+    content_notice_accepted_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     media: Mapped[list["ObsMedia"]] = relationship(back_populates="observation")

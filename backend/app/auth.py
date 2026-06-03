@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
@@ -8,11 +8,11 @@ from app.database import get_db
 from app.models.user import User, UserApprovalStatus, UserRole
 from app.observability import user_id_ctx_var
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 optional_security = HTTPBearer(auto_error=False)
-DEMO_USER_DISPLAY_NAME = "Дмитрий Максимович Сотников"
+DEMO_USER_DISPLAY_NAME = "Тестовый пользователь"
 STALE_DEMO_DISPLAY_NAMES = {
-    "Сотников Д.С.",
+    "Старое демо-имя",
     "Dev employee",
     "Dev ecologist",
     "Dev admin",
@@ -81,8 +81,8 @@ def _get_or_create_user(payload: dict, db: Session) -> User:
         role = _resolve_role(payload, fallback=UserRole.employee)
         user = User(
             external_id=external_id,
-            display_name=payload.get("name", "Unknown"),
-            email=claimed_email or f"{external_id}@nlmk.com",
+            display_name=_normalize_dev_display_name(payload.get("name")) or "Пользователь",
+            email=claimed_email or None,
             role=role,
             approval_status=UserApprovalStatus.approved,
             is_active=True,
@@ -129,10 +129,10 @@ def _get_or_create_user(payload: dict, db: Session) -> User:
 
 
 def _ensure_user_can_authenticate(user: User) -> None:
-    if not user.is_active or user.approval_status != UserApprovalStatus.approved:
+    if not user.is_active or user.approval_status == UserApprovalStatus.rejected:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="User is not approved",
+            detail="User is not active",
         )
 
 
@@ -141,23 +141,41 @@ def _set_user_context(user: User) -> User:
     return user
 
 
+def _token_from_request(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None,
+) -> str:
+    if credentials is not None:
+        return credentials.credentials
+    cookie_token = request.cookies.get("gb_session")
+    if cookie_token:
+        return cookie_token
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated",
+    )
+
+
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: Session = Depends(get_db),
 ) -> User:
-    payload = _decode_token(credentials.credentials)
+    payload = _decode_token(_token_from_request(request, credentials))
     user = _get_or_create_user(payload, db)
     _ensure_user_can_authenticate(user)
     return _set_user_context(user)
 
 
 def get_optional_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(optional_security),
     db: Session = Depends(get_db),
 ) -> User | None:
-    if credentials is None:
+    token = credentials.credentials if credentials is not None else request.cookies.get("gb_session")
+    if not token:
         return None
-    payload = _decode_token(credentials.credentials)
+    payload = _decode_token(token)
     user = _get_or_create_user(payload, db)
     _ensure_user_can_authenticate(user)
     return _set_user_context(user)

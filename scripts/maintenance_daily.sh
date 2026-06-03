@@ -77,8 +77,10 @@ fi
 if [[ "$SKIP_PURGE" != "true" ]]; then
   if [[ "$DRY_RUN" == "true" ]]; then
     ./scripts/purge_audit_logs.sh --days "$RETENTION_DAYS" --dry-run
+    python3 scripts/cleanup_media_retention.py
   else
     ./scripts/purge_audit_logs.sh --days "$RETENTION_DAYS"
+    python3 scripts/cleanup_media_retention.py --apply
   fi
 fi
 

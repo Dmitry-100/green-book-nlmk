@@ -41,4 +41,6 @@ class User(Base):
     approved_at: Mapped[datetime | None] = mapped_column(DateTime)
     approved_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime)
+    privacy_notice_version: Mapped[str | None] = mapped_column(String(50))
+    privacy_notice_accepted_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

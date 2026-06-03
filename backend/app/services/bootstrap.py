@@ -39,6 +39,8 @@ def ensure_bootstrap_admin(db: Session) -> User | None:
         is_active=True,
         must_change_password=True,
         approved_at=now,
+        privacy_notice_version=settings.privacy_notice_version,
+        privacy_notice_accepted_at=now,
     )
     db.add(admin)
     db.commit()

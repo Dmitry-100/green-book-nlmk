@@ -113,7 +113,7 @@ router.beforeEach((to) => {
     return true
   }
 
-  if (to.name && authRequiredNames.has(to.name.toString()) && !auth.token) {
+  if (to.name && authRequiredNames.has(to.name.toString()) && !auth.isAuthenticated()) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
 

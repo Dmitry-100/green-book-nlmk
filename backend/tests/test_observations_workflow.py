@@ -9,6 +9,7 @@ from app.models.observation import (
     ObsMedia,
     Observation,
     ObservationStatus,
+    SensitiveLevel,
 )
 from app.models.species import Species, SpeciesCategory, SpeciesGroup
 from app.models.user import User, UserRole
@@ -97,6 +98,24 @@ def test_create_observation_requires_safety_ack(client, employee_token):
     assert response.json()["detail"] == "Safety rules must be acknowledged before submission"
 
 
+def test_create_observation_requires_content_notice(client, employee_token):
+    response = client.post(
+        "/api/observations",
+        headers={"Authorization": f"Bearer {employee_token}"},
+        json={
+            "group": "birds",
+            "observed_at": "2026-04-11T10:00:00Z",
+            "lat": 52.59,
+            "lon": 39.60,
+            "safety_checked": True,
+            "is_incident": False,
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Content upload rules must be acknowledged before submission"
+
+
 def test_create_observation_uses_species_group(client, db, employee_token, monkeypatch):
     species = _create_species(db, name_suffix="CreateFlow", group=SpeciesGroup.plants)
     monkeypatch.setattr(observations_router, "detect_zone", lambda *_args, **_kwargs: None)
@@ -111,6 +130,8 @@ def test_create_observation_uses_species_group(client, db, employee_token, monke
             "lat": 52.59,
             "lon": 39.60,
             "safety_checked": True,
+            "content_notice_accepted": True,
+            "content_notice_version": settings.privacy_notice_version,
             "comment": "created via API",
             "is_incident": False,
         },
@@ -122,6 +143,7 @@ def test_create_observation_uses_species_group(client, db, employee_token, monke
     assert payload["group"] == SpeciesGroup.plants.value
     assert payload["site_zone_id"] is None
     assert payload["status"] == ObservationStatus.on_review.value
+    assert payload["sensitive_level"] == SensitiveLevel.blurred.value
 
 
 def test_create_observation_validates_incident_fields(client, employee_token):
@@ -134,6 +156,8 @@ def test_create_observation_validates_incident_fields(client, employee_token):
             "lat": 52.59,
             "lon": 39.60,
             "safety_checked": True,
+            "content_notice_accepted": True,
+            "content_notice_version": settings.privacy_notice_version,
             "is_incident": True,
         },
     )
@@ -255,6 +279,100 @@ def test_comments_and_likes_flow_for_confirmed_observation(client, db):
     assert second_like.status_code == 200
     assert second_like.json()["liked"] is False
     assert second_like.json()["count"] == 0
+
+
+def test_comments_reject_personal_data(client, db):
+    author = _create_user(db, external_id="obs-comment-pd-author")
+    obs = _create_observation(
+        db,
+        author_id=author.id,
+        status=ObservationStatus.confirmed,
+        group=SpeciesGroup.birds.value,
+    )
+    viewer_token = make_token(
+        external_id="obs-comment-pd-viewer",
+        name="Obs Viewer",
+        email="obs-comment-pd-viewer@nlmk.com",
+        role="employee",
+    )
+
+    response = client.post(
+        f"/api/observations/{obs.id}/comments",
+        headers={"Authorization": f"Bearer {viewer_token}"},
+        json={"text": "Напишите мне на viewer@example.com"},
+    )
+
+    assert response.status_code == 400
+    assert "персональные данные" in response.json()["detail"]
+
+
+def test_public_observation_detail_hides_author_id_and_exact_coordinates(client, db):
+    author = _create_user(db, external_id="obs-public-author")
+    author.display_name = "Олег Автор"
+    db.commit()
+    obs = Observation(
+        author_id=author.id,
+        species_id=None,
+        group=SpeciesGroup.birds.value,
+        observed_at=datetime.now(timezone.utc),
+        location_point=WKTElement("POINT(39.604321 52.591234)", srid=4326),
+        status=ObservationStatus.confirmed,
+        comment="public observation privacy",
+        is_incident=False,
+        safety_checked=True,
+        sensitive_level=SensitiveLevel.blurred,
+    )
+    db.add(obs)
+    db.commit()
+    db.refresh(obs)
+
+    response = client.get(f"/api/observations/{obs.id}")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload.get("author_id") is None
+    assert payload["author_public_name"] == "ОА"
+    assert payload["author_display_name"] is None
+    assert payload["lat"] is None
+    assert payload["lon"] is None
+
+
+def test_author_observation_detail_keeps_author_id_and_exact_coordinates(client, db):
+    author = _create_user(db, external_id="obs-author-detail")
+    author.display_name = "Анна Автор"
+    db.commit()
+    obs = Observation(
+        author_id=author.id,
+        species_id=None,
+        group=SpeciesGroup.birds.value,
+        observed_at=datetime.now(timezone.utc),
+        location_point=WKTElement("POINT(39.604321 52.591234)", srid=4326),
+        status=ObservationStatus.confirmed,
+        comment="author observation privacy",
+        is_incident=False,
+        safety_checked=True,
+        sensitive_level=SensitiveLevel.blurred,
+    )
+    db.add(obs)
+    db.commit()
+    db.refresh(obs)
+    token = make_token(
+        external_id=author.external_id,
+        name=author.display_name,
+        email=author.email or "author@example.com",
+        role="employee",
+    )
+
+    response = client.get(
+        f"/api/observations/{obs.id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["author_id"] == author.id
+    assert payload["lat"] == 52.591234
+    assert payload["lon"] == 39.604321
 
 
 def test_attach_media_rejects_duplicates_and_respects_max_limit(

@@ -62,7 +62,7 @@
             v-model="form.comment"
             class="native-textarea"
             rows="3"
-            placeholder="Описание: что делало, сколько особей..."
+            placeholder="Описание: что делало, сколько особей. Не указывайте персональные данные."
           ></textarea>
         </div>
       </div>
@@ -76,7 +76,7 @@
 
       <!-- Photo upload -->
       <div class="form-section">
-        <div class="form-section__title">Фото / Видео *</div>
+        <div class="form-section__title">Фото *</div>
         <div class="photo-upload-area">
           <div v-for="(photo, i) in photos" :key="i" class="photo-preview">
             <img :src="photo.preview" alt="photo" />
@@ -88,6 +88,13 @@
             <span class="photo-add__text">Добавить фото</span>
           </label>
         </div>
+        <label class="native-checkbox native-checkbox--content">
+          <input v-model="form.content_notice_accepted" type="checkbox" />
+          <span>
+            На фото нет людей, пропусков, документов, номеров автомобилей и режимных объектов;
+            фото сделано мной или у меня есть право его загрузить.
+          </span>
+        </label>
       </div>
 
       <!-- Incident toggle -->
@@ -170,6 +177,7 @@ const mapEl = ref<HTMLElement>()
 const photos = ref<{ file: File; preview: string }[]>([])
 const speciesOptions = ref<SpeciesOption[]>([])
 const speciesLoading = ref(false)
+const privacyNoticeVersion = ref('')
 const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 const MAX_MEDIA_ITEMS = 10
@@ -196,10 +204,16 @@ const form = reactive({
   incident_type: '',
   incident_severity: '',
   safety_checked: false,
+  content_notice_accepted: false,
 })
 
 const canSubmit = computed(() => {
-  if (!form.group || !form.safety_checked || photos.value.length === 0) return false
+  if (
+    !form.group
+    || !form.safety_checked
+    || !form.content_notice_accepted
+    || photos.value.length === 0
+  ) return false
   if (form.is_incident && (!form.incident_type || !form.incident_severity)) return false
   return true
 })
@@ -296,6 +310,18 @@ async function uploadMedia(observationId: number) {
 
 // Init species and map for point selection.
 onMounted(async () => {
+  try {
+    const { data } = await getCached(
+      '/privacy/notice',
+      {},
+      5 * 60 * 1000,
+      'privacy:notice'
+    )
+    privacyNoticeVersion.value = data.version || ''
+  } catch {
+    privacyNoticeVersion.value = ''
+  }
+
   if (form.species_id) {
     try {
       const { data } = await getCached(
@@ -368,6 +394,8 @@ async function submit() {
       comment: form.comment || null,
       is_incident: form.is_incident,
       safety_checked: form.safety_checked,
+      content_notice_accepted: form.content_notice_accepted,
+      content_notice_version: privacyNoticeVersion.value,
     }
     if (form.is_incident) {
       payload.incident_type = form.incident_type
@@ -463,6 +491,13 @@ async function submit() {
   align-items: flex-start;
 }
 .native-checkbox--safety input {
+  margin-top: 2px;
+}
+.native-checkbox--content {
+  align-items: flex-start;
+  margin-top: 14px;
+}
+.native-checkbox--content input {
   margin-top: 2px;
 }
 .native-button {

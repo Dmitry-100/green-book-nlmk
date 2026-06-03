@@ -89,7 +89,7 @@ Hero-секция с лебедем из обложки «Зелёной кни�
 ![Админ-панель](docs/screenshots/16-admin.png)
 
 ### Вход и регистрация
-Публичные разделы доступны без входа. Для внесения наблюдений пользователь регистрируется с логином и паролем; новая учетная запись начинает работать после подтверждения экологом или администратором.
+Публичные разделы доступны без входа. Для внесения наблюдений пользователь регистрируется с логином, паролем и публичным именем/псевдонимом; учетная запись начинает работать сразу. Проверку проходит только само наблюдение.
 
 ![Вход](docs/screenshots/17-login.png)
 
@@ -227,7 +227,7 @@ Hero-секция с лебедем из обложки «Зелёной кни�
 | **Медиа** | MinIO (S3-совместимое хранилище) |
 | **Кэш** | Redis 7 |
 | **Инфраструктура** | Docker, Docker Compose |
-| **Аутентификация** | JWT + локальная регистрация с подтверждением |
+| **Аутентификация** | HttpOnly cookie + локальная регистрация без подтверждения пользователя |
 
 ---
 
@@ -241,14 +241,15 @@ Hero-секция с лебедем из обложки «Зелёной кни�
 | **Observations** | `POST/GET /api/observations`, `GET /my`, `GET/{id}`, `PATCH/{id}` | Наблюдения сотрудников |
 | **Comments** | `GET/POST /api/observations/{id}/comments` | Комментарии к наблюдениям |
 | **Likes** | `GET/POST /api/observations/{id}/likes`, `GET /{id}/likes/me` | Лайки наблюдений |
-| **Media** | `POST /api/observations/upload-url`, `POST /{id}/media` | Загрузка медиа через presigned URL |
+| **Media** | `POST /api/observations/upload`, `POST /api/observations/upload-url`, `POST /{id}/media` | Загрузка фото, presigned URL отключается в production |
 | **Validation** | `GET /queue`, `POST /{id}/confirm\|reject\|request-data` | Валидация экологом |
 | **Notifications** | `GET`, `PATCH /{id}/read`, `GET /unread-count` | Уведомления |
 | **Map** | `GET /observations`, `GET /zones`, `GET /zone-by-point` | GeoJSON для карты |
 | **Gamification** | `GET /leaderboard\|profile\|stats\|challenge\|quiz\|fact-of-day` | Геймификация |
 | **Identifier** | `GET /tree`, `POST /suggest` | Дерево определителя |
 | **Export** | `GET /observations` | Выгрузка в XLSX |
-| **Admin** | `POST /zones/import`, `GET /audit/events`, `POST /audit/purge`, `GET /users`, `POST /users/{id}/approve`, `POST /users/{id}/set-role`, `GET /ops/summary`, `GET /ops/alerts` | Импорт зон, пользователи, audit trail и операционный контроль |
+| **Admin** | `POST /zones/import`, `GET /audit/events`, `POST /audit/purge`, `GET /users`, `POST /users/{id}/set-role`, `POST /users/{id}/deactivate`, `GET /ops/summary`, `GET /ops/alerts` | Импорт зон, пользователи, роли, audit trail и операционный контроль |
+| **Privacy** | `GET /privacy/notice` | Текущая версия уведомления об обработке данных |
 | **Config** | `GET /config/ymaps` | API-ключ карт |
 
 ---
@@ -281,9 +282,8 @@ Hero-секция с лебедем из обложки «Зелёной кни�
 | Роль | Возможности | Навигация |
 |---|---|---|
 | **Гость** | Просмотр главной, каталога, карточек видов, карты, выставки и правил | Публичные вкладки |
-| **Ожидает подтверждения** | Видит статус заявки, но не может отправлять наблюдения | Вход заблокирован до подтверждения |
 | **Сотрудник** | Создание наблюдений, просмотр каталога и карты, викторина, профиль | Все вкладки кроме «Эколог» и «Админ» |
-| **Эколог** | + Валидация наблюдений, подтверждение заявок сотрудников, экспорт данных | + вкладка «Эколог» |
+| **Эколог** | + Валидация наблюдений, экспорт данных | + вкладка «Эколог» |
 | **Администратор** | + Управление справочниками, пользователями, ролями, импорт зон | + вкладки «Эколог» и «Админ» |
 
 ---
@@ -458,9 +458,9 @@ python scripts/release_smoke.py \
 `/api/metrics/prometheus`, `/api/admin/audit/events` и `/api/admin/ops/alerts`.
 Флаг `--fail-on-ops-alerts` делает активные ops-alerts блокирующими.
 
-Полный write-workflow для test/staging создает тестового пользователя, подтверждает
-его, отправляет наблюдение, подтверждает наблюдение и обезличивает тестового
-пользователя. Используйте только там, где допустимы тестовые записи:
+Полный write-workflow для test/staging создает тестового пользователя,
+сразу входит под ним, отправляет наблюдение, подтверждает наблюдение
+и обезличивает тестового пользователя. Используйте только там, где допустимы тестовые записи:
 
 ```bash
 python scripts/release_smoke.py \
@@ -590,6 +590,9 @@ STAGING_BACKEND_PORT=18000 \
 - `BOOTSTRAP_ADMIN_LOGIN` / `BOOTSTRAP_ADMIN_PASSWORD` / `BOOTSTRAP_ADMIN_DISPLAY_NAME` — первая учетная запись администратора; после входа пароль нужно заменить
 - `CORS_ORIGINS` — список разрешённых доменов без `*`
 - `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` — не дефолтные значения
+- `MEDIA_DIRECT_UPLOAD_ENABLED=false` — presigned direct upload отключен вне development
+- `PRIVACY_NOTICE_VERSION` — актуальная версия уведомления об обработке данных
+- `PRIVACY_OPERATOR_NAME` / `PRIVACY_PROCESSING_PURPOSE` / `PRIVACY_RETENTION_TEXT` / `PRIVACY_CONTACT_TEXT` — согласованные тексты уведомления
 - `API_RATE_LIMIT_ENABLED=true`
 - `frontend/public/robots.txt` и HTTP header `X-Robots-Tag: noindex, nofollow` включены для защиты от индексации при ошибочной публикации
 - `docs/content-rights/assets-register.csv` заполнен; `python3 scripts/content_rights_check.py` не должен показывать новых непокрытых ассетов
@@ -612,6 +615,8 @@ STAGING_BACKEND_PORT=18000 \
 - `MEDIA_MAX_IMAGE_PIXELS` — лимит суммарных пикселей изображения (обычно `12..36 MP`)
 - `MEDIA_THUMBNAIL_SIZE` — размер thumbnail по длинной стороне (обычно `256..512`)
 - `MEDIA_ASYNC_PROCESSING_ENABLED` — включает асинхронный media pipeline
+- `UNATTACHED_MEDIA_RETENTION_HOURS` — TTL для незакрепленных media-объектов
+- `REJECTED_OBSERVATION_MEDIA_RETENTION_DAYS` — TTL media у отклоненных наблюдений
 - `MEDIA_PROCESSING_BATCH_SIZE` — размер batch для media worker/admin trigger
 - `MEDIA_PROCESSING_MAX_ATTEMPTS` — max retry попыток media pipeline
 - `MEDIA_PROCESSING_RETRY_BACKOFF_SECONDS` — базовый backoff для retry

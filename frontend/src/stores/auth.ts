@@ -13,12 +13,12 @@ interface UserInfo {
 }
 
 export const useAuthStore = defineStore('auth', () => {
-  const token = ref<string | null>(localStorage.getItem('auth_token'))
+  localStorage.removeItem('auth_token')
+  const token = ref<string | null>(null)
   const user = ref<UserInfo | null>(JSON.parse(localStorage.getItem('auth_user') || 'null'))
 
   function setToken(t: string) {
     token.value = t
-    localStorage.setItem('auth_token', t)
   }
 
   function setUser(u: UserInfo) {
@@ -46,6 +46,10 @@ export const useAuthStore = defineStore('auth', () => {
     return user.value?.role === 'admin'
   }
 
+  function isAuthenticated() {
+    return Boolean(token.value || user.value)
+  }
+
   return {
     token,
     user,
@@ -53,6 +57,7 @@ export const useAuthStore = defineStore('auth', () => {
     setUser,
     setSession,
     clearSession,
+    isAuthenticated,
     isEcologist,
     isAdmin,
   }

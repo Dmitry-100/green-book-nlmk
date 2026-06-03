@@ -9,7 +9,7 @@ from app.database import SessionLocal
 from app.middleware import RateLimitMiddleware, RequestLoggingMiddleware
 from app.observability import configure_logging, init_sentry
 from app.services.bootstrap import ensure_bootstrap_admin
-from app.routers import health, species, observations, validation, notifications
+from app.routers import health, privacy, species, observations, validation, notifications
 from app.routers import auth as auth_router
 from app.routers import identifier as identifier_router
 from app.routers import export as export_router
@@ -67,6 +67,7 @@ if settings.api_rate_limit_enabled and settings.api_rate_limit_per_minute > 0:
         requests_per_window=settings.api_rate_limit_per_minute,
     )
 app.include_router(health.router)
+app.include_router(privacy.router)
 app.include_router(auth_router.router)
 app.include_router(species.router)
 app.include_router(observations.router)

@@ -1,38 +1,49 @@
+from jose import jwt
+
+from app.config import settings
 from app.models.user import User, UserApprovalStatus, UserRole
 from app.services.passwords import hash_password
 
 
-def test_register_creates_pending_employee(client, db):
+def test_register_creates_approved_employee_without_email(client, db):
     response = client.post(
         "/api/auth/register",
         json={
             "login": "ivanov_dm",
             "password": "strong-password",
-            "display_name": "Иванов Дмитрий Максимович",
-            "email": "ivanov@example.com",
+            "display_name": "ИД",
             "personal_data_notice_accepted": True,
+            "privacy_notice_version": settings.privacy_notice_version,
         },
     )
 
     assert response.status_code == 201
     payload = response.json()
     assert payload["user"]["role"] == "employee"
-    assert payload["user"]["approval_status"] == "pending"
+    assert payload["user"]["approval_status"] == "approved"
     assert payload["user"]["public_name"] == "ИД"
+    assert payload["user"]["email"] is None
+    assert "можно войти" in payload["message"].lower()
 
     user = db.query(User).filter(User.login == "ivanov_dm").one()
     assert user.password_hash
     assert user.password_hash != "strong-password"
+    assert user.email is None
+    assert user.privacy_notice_version == settings.privacy_notice_version
+    assert user.privacy_notice_accepted_at is not None
+    assert user.approved_at is not None
+    assert user.approved_by_id is None
 
 
-def test_pending_user_cannot_login(client):
+def test_registered_user_can_login_immediately_and_receives_cookie(client):
     client.post(
         "/api/auth/register",
         json={
             "login": "petrov_am",
             "password": "strong-password",
-            "display_name": "Петров Алексей Михайлович",
+            "display_name": "ПА",
             "personal_data_notice_accepted": True,
+            "privacy_notice_version": settings.privacy_notice_version,
         },
     )
 
@@ -41,28 +52,99 @@ def test_pending_user_cannot_login(client):
         json={"login": "petrov_am", "password": "strong-password"},
     )
 
-    assert response.status_code == 403
-    assert "ожидает подтверждения" in response.json()["detail"]
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["user"]["approval_status"] == "approved"
+    assert "gb_session=" in response.headers["set-cookie"]
+    assert "HttpOnly" in response.headers["set-cookie"]
+
+    token_payload = jwt.decode(
+        payload["access_token"],
+        settings.auth_secret_key,
+        algorithms=[settings.auth_algorithm],
+    )
+    assert token_payload["sub"] == "local:petrov_am"
+    assert token_payload["typ"] == "access"
+    assert "name" not in token_payload
+    assert "email" not in token_payload
 
 
-def test_admin_can_approve_user_and_user_can_login(client, db, admin_token):
+def test_me_accepts_session_cookie(client):
+    register_response = client.post(
+        "/api/auth/register",
+        json={
+            "login": "cookie_user",
+            "password": "strong-password",
+            "display_name": "CU",
+            "personal_data_notice_accepted": True,
+            "privacy_notice_version": settings.privacy_notice_version,
+        },
+    )
+    assert register_response.status_code == 201
+    login_response = client.post(
+        "/api/auth/login",
+        json={"login": "cookie_user", "password": "strong-password"},
+    )
+    assert login_response.status_code == 200
+
+    me_response = client.get("/api/auth/me")
+
+    assert me_response.status_code == 200
+    assert me_response.json()["display_name"] == "CU"
+
+
+def test_register_rejects_email_payload(client):
+    response = client.post(
+        "/api/auth/register",
+        json={
+            "login": "email_payload",
+            "password": "strong-password",
+            "display_name": "EP",
+            "email": "email_payload@example.com",
+            "personal_data_notice_accepted": True,
+            "privacy_notice_version": settings.privacy_notice_version,
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_register_rejects_display_name_with_personal_or_reserved_data(client):
+    base_payload = {
+        "login": "bad_display",
+        "password": "strong-password",
+        "personal_data_notice_accepted": True,
+        "privacy_notice_version": settings.privacy_notice_version,
+    }
+    for display_name in ["ivan@example.com", "+7 900 111-22-33", "Главный эколог", "НЛМК admin"]:
+        response = client.post(
+            "/api/auth/register",
+            json={**base_payload, "login": f"bad_{abs(hash(display_name))}", "display_name": display_name},
+        )
+        assert response.status_code == 422
+
+
+def test_privacy_notice_endpoint_returns_current_version(client):
+    response = client.get("/api/privacy/notice")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["version"] == settings.privacy_notice_version
+    assert payload["operator_name"]
+    assert payload["data_categories"]
+
+
+def test_legacy_pending_user_can_login_after_backfill(client, db):
     user = User(
         external_id="local:sidorov_ir",
         login="sidorov_ir",
         password_hash=hash_password("strong-password"),
-        display_name="Сидоров Иван Романович",
+        display_name="СИ",
         role=UserRole.employee,
         approval_status=UserApprovalStatus.pending,
     )
     db.add(user)
     db.commit()
-
-    approve_response = client.post(
-        f"/api/admin/users/{user.id}/approve",
-        headers={"Authorization": f"Bearer {admin_token}"},
-    )
-    assert approve_response.status_code == 200
-    assert approve_response.json()["approval_status"] == "approved"
 
     login_response = client.post(
         "/api/auth/login",
@@ -84,6 +166,7 @@ def test_registration_rejects_role_in_payload(client):
             "display_name": "Role Hacker",
             "role": "admin",
             "personal_data_notice_accepted": True,
+            "privacy_notice_version": settings.privacy_notice_version,
         },
     )
 

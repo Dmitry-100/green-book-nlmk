@@ -54,23 +54,16 @@
         </label>
 
         <label class="login-field">
-          <span>Фамилия, имя и отчество</span>
+          <span>Как вас показывать в приложении</span>
           <input
             v-model="registerForm.displayName"
             autocomplete="name"
-            placeholder="Иванов Дмитрий Максимович"
+            placeholder="Например: Дмитрий М."
           />
         </label>
-
-        <label class="login-field">
-          <span>Email</span>
-          <input
-            v-model="registerForm.email"
-            autocomplete="email"
-            inputmode="email"
-            placeholder="name@example.com"
-          />
-        </label>
+        <p class="login-hint">
+          Не указывайте телефон, табельный номер, подразделение или служебные данные.
+        </p>
 
         <label class="login-field">
           <span>Пароль</span>
@@ -84,15 +77,13 @@
         <label class="notice-check">
           <input v-model="registerForm.personalDataNoticeAccepted" type="checkbox" />
           <span>
-            Я понимаю, что имя, логин и email будут использоваться для входа,
-            обработки наблюдений и служебного аудита. В публичных разделах будут
-            отображаться инициалы.
+            Я принимаю уведомление об обработке данных: {{ privacyNoticeText }}
           </span>
         </label>
 
         <p v-if="message" class="login-message" :class="{ error: hasError }">{{ message }}</p>
         <button class="login-submit" type="submit" :disabled="loading">
-          {{ loading ? 'Отправляем...' : 'Отправить заявку' }}
+          {{ loading ? 'Регистрируем...' : 'Зарегистрироваться' }}
         </button>
       </form>
     </div>
@@ -100,7 +91,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../api/client'
 import { useAuthStore } from '../stores/auth'
@@ -123,6 +114,12 @@ const loading = ref(false)
 const mode = ref<'login' | 'register'>('login')
 const message = ref('')
 const hasError = ref(false)
+const privacyNoticeVersion = ref('')
+const privacyNoticeText = computed(() => (
+  privacyNoticeVersion.value
+    ? `версия ${privacyNoticeVersion.value}; данные нужны для входа, наблюдений и служебного аудита.`
+    : 'данные нужны для входа, наблюдений и служебного аудита.'
+))
 
 const loginForm = reactive({
   login: '',
@@ -132,7 +129,6 @@ const loginForm = reactive({
 const registerForm = reactive({
   login: '',
   displayName: '',
-  email: '',
   password: '',
   personalDataNoticeAccepted: false,
 })
@@ -162,6 +158,15 @@ function resetMessage() {
   message.value = ''
   hasError.value = false
 }
+
+onMounted(async () => {
+  try {
+    const { data } = await api.get('/privacy/notice')
+    privacyNoticeVersion.value = data.version || ''
+  } catch {
+    privacyNoticeVersion.value = ''
+  }
+})
 
 async function login() {
   resetMessage()
@@ -207,20 +212,26 @@ async function register() {
 
   loading.value = true
   try {
+    const noticeVersion = privacyNoticeVersion.value
+    if (!noticeVersion) {
+      message.value = 'Не удалось загрузить уведомление об обработке данных. Обновите страницу.'
+      hasError.value = true
+      return
+    }
     const { data } = await api.post('/auth/register', {
       login: registerForm.login,
       password: registerForm.password,
       display_name: registerForm.displayName,
-      email: registerForm.email || null,
       personal_data_notice_accepted: registerForm.personalDataNoticeAccepted,
+      privacy_notice_version: noticeVersion,
     })
     mode.value = 'login'
     loginForm.login = registerForm.login
     loginForm.password = ''
-    message.value = data.message || 'Заявка отправлена и ожидает подтверждения.'
+    message.value = data.message || 'Регистрация завершена. Можно войти.'
     hasError.value = false
   } catch (error) {
-    message.value = readError(error, 'Не удалось отправить заявку. Проверьте поля.')
+    message.value = readError(error, 'Не удалось зарегистрироваться. Проверьте поля.')
     hasError.value = true
   } finally {
     loading.value = false
@@ -327,6 +338,13 @@ async function register() {
 .login-field input:focus {
   border-color: var(--teal);
   box-shadow: 0 0 0 3px rgba(42, 122, 110, 0.1);
+}
+
+.login-hint {
+  margin: -6px 0 2px;
+  color: var(--slate-mid);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .notice-check {

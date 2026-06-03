@@ -1,12 +1,12 @@
 const ABBREVIATED_NAME_RE = /(?:^|\s)([A-Za-zА-ЯЁ])\.\s*([A-Za-zА-ЯЁ])\./u
 const STALE_DEMO_DISPLAY_NAMES = new Set([
-  'Сотников Д.С.',
+  'Старое демо-имя',
   'Dev employee',
   'Dev ecologist',
   'Dev admin',
 ])
 
-export const DEMO_USER_DISPLAY_NAME = 'Дмитрий Максимович Сотников'
+export const DEMO_USER_DISPLAY_NAME = 'Тестовый пользователь'
 
 function firstLetter(value: string): string {
   return value.match(/[A-Za-zА-Яа-яЁё]/u)?.[0] || ''

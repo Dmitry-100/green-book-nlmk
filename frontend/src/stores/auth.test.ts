@@ -36,13 +36,12 @@ describe('auth store', () => {
     setActivePinia(createPinia())
   })
 
-  it('clears the active auth session', () => {
-    localStorage.setItem('auth_token', 'token')
+  it('keeps auth token out of localStorage and clears user state', () => {
     localStorage.setItem('auth_user', JSON.stringify({
       id: 1,
       displayName: 'Тестовый Пользователь',
       publicName: 'ТП',
-      email: 'tester@example.com',
+      email: null,
       role: 'employee',
       approvalStatus: 'approved',
       isActive: true,
@@ -50,7 +49,20 @@ describe('auth store', () => {
     }))
 
     const auth = useAuthStore()
+    auth.setSession('token', {
+      id: 2,
+      displayName: 'Наблюдатель',
+      publicName: 'Н',
+      email: null,
+      role: 'employee',
+      approvalStatus: 'approved',
+      isActive: true,
+      mustChangePassword: false,
+    })
+
     expect(auth.token).toBe('token')
+    expect(localStorage.getItem('auth_token')).toBeNull()
+    expect(localStorage.getItem('auth_user')).toContain('Наблюдатель')
 
     auth.clearSession()
 

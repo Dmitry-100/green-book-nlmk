@@ -16,6 +16,7 @@ from app.models.observation import (
     ObsMedia,
     ObservationStatus,
     MediaProcessingStatus,
+    SensitiveLevel,
 )
 from app.models.species import Species, SpeciesGroup
 from app.models.user import User, UserRole
@@ -36,7 +37,7 @@ from app.services.media import (
     store_uploaded_file,
     validate_uploaded_object,
 )
-from app.services.user_privacy import build_public_name
+from app.services.user_privacy import build_public_name, contains_email_or_phone
 
 router = APIRouter(prefix="/api/observations", tags=["observations"])
 MAX_MEDIA_PER_OBSERVATION = 10
@@ -80,6 +81,55 @@ def _get_observation_for_read(
 
 def _can_view_author_display_name(user: User | None) -> bool:
     return user is not None and user.role in (UserRole.ecologist, UserRole.admin)
+
+
+def _can_view_private_observation_data(obs: Observation, user: User | None) -> bool:
+    if user is None:
+        return False
+    if user.role in (UserRole.ecologist, UserRole.admin):
+        return True
+    return user.id in {obs.author_id, obs.reviewer_id}
+
+
+def _sanitize_public_coordinates(
+    result: ObservationResponse,
+    obs: Observation,
+) -> None:
+    if result.lat is None or result.lon is None:
+        return
+    if obs.sensitive_level == SensitiveLevel.open:
+        result.lat = round(result.lat, 3)
+        result.lon = round(result.lon, 3)
+        return
+    result.lat = None
+    result.lon = None
+
+
+def _serialize_observation(
+    obs: Observation,
+    user: User | None,
+    *,
+    lat: float | None = None,
+    lon: float | None = None,
+) -> ObservationResponse:
+    result = ObservationResponse.model_validate(obs)
+    if lat is not None:
+        result.lat = lat
+    if lon is not None:
+        result.lon = lon
+    if not _can_view_private_observation_data(obs, user):
+        result.author_id = None
+        result.author_display_name = None
+        _sanitize_public_coordinates(result, obs)
+    return result
+
+
+def _reject_personal_data_text(value: str | None, *, field_name: str) -> None:
+    if contains_email_or_phone(value):
+        raise HTTPException(
+            status_code=400,
+            detail=f"{field_name} не должен содержать персональные данные",
+        )
 
 
 def _attach_author_names(
@@ -154,6 +204,18 @@ def create_observation(
             status_code=400,
             detail="Safety rules must be acknowledged before submission",
         )
+    if not data.content_notice_accepted:
+        raise HTTPException(
+            status_code=400,
+            detail="Content upload rules must be acknowledged before submission",
+        )
+    if data.content_notice_version != settings.privacy_notice_version:
+        raise HTTPException(
+            status_code=400,
+            detail="Версия правил загрузки фото устарела. Обновите страницу.",
+        )
+    _reject_personal_data_text(data.comment, field_name="Комментарий")
+
     species = None
     if data.species_id:
         species = _get_species_or_404(data.species_id, db)
@@ -173,14 +235,17 @@ def create_observation(
         incident_type=data.incident_type,
         incident_severity=data.incident_severity,
         incident_status="new" if data.is_incident else None,
+        sensitive_level=SensitiveLevel.blurred,
         safety_checked=data.safety_checked,
+        content_notice_version=data.content_notice_version,
+        content_notice_accepted_at=datetime.now(timezone.utc),
     )
     db.add(obs)
     db.commit()
     db.refresh(obs)
     _invalidate_validation_queue_cache()
     _attach_author_names([obs], db, user)
-    return obs
+    return _serialize_observation(obs, user)
 
 
 @router.post("/{obs_id}/media", response_model=ObservationResponse)
@@ -266,7 +331,7 @@ def attach_media(
     if obs.status in (ObservationStatus.on_review, ObservationStatus.needs_data):
         _invalidate_validation_queue_cache()
     _attach_author_names([obs], db, user)
-    return obs
+    return _serialize_observation(obs, user)
 
 
 @router.get("", response_model=ObservationListResponse)
@@ -295,7 +360,10 @@ def list_observations(
     total = query.count() if include_total else None
     items = query.order_by(Observation.created_at.desc()).offset(skip).limit(limit).all()
     _attach_author_names(items, db, user)
-    return ObservationListResponse(items=items, total=total)
+    return ObservationListResponse(
+        items=[_serialize_observation(item, user) for item in items],
+        total=total,
+    )
 
 
 @router.get("/my", response_model=ObservationListResponse)
@@ -315,7 +383,10 @@ def my_observations(
     total = query.count() if include_total else None
     items = query.order_by(Observation.created_at.desc()).offset(skip).limit(limit).all()
     _attach_author_names(items, db, user)
-    return ObservationListResponse(items=items, total=total)
+    return ObservationListResponse(
+        items=[_serialize_observation(item, user) for item in items],
+        total=total,
+    )
 
 
 @router.get("/{obs_id}", response_model=ObservationResponse)
@@ -332,11 +403,12 @@ def get_observation(
         ST_X(Observation.location_point).label("lon"),
     ).filter(Observation.id == obs_id).first()
     _attach_author_names([obs], db, user)
-    result = ObservationResponse.model_validate(obs)
+    lat = None
+    lon = None
     if coords and coords.lat is not None:
-        result.lat = float(coords.lat)
-        result.lon = float(coords.lon)
-    return result
+        lat = float(coords.lat)
+        lon = float(coords.lon)
+    return _serialize_observation(obs, user, lat=lat, lon=lon)
 
 
 @router.patch("/{obs_id}", response_model=ObservationResponse)
@@ -355,6 +427,7 @@ def update_observation(
         raise HTTPException(status_code=400, detail="Can only update when status is needs_data")
     updates = data.model_dump(exclude_unset=True)
     if "comment" in updates:
+        _reject_personal_data_text(updates["comment"], field_name="Комментарий")
         obs.comment = updates["comment"]
     if "species_id" in updates:
         if updates["species_id"] is None:
@@ -368,7 +441,7 @@ def update_observation(
     if obs.status in (ObservationStatus.on_review, ObservationStatus.needs_data):
         _invalidate_validation_queue_cache()
     _attach_author_names([obs], db, user)
-    return obs
+    return _serialize_observation(obs, user)
 
 
 @router.post("/upload")
@@ -395,6 +468,8 @@ def get_upload_url(
     data: UploadUrlRequest,
     user: User = Depends(get_current_user),
 ):
+    if not settings.media_direct_upload_enabled:
+        raise HTTPException(status_code=403, detail="Direct media upload is disabled")
     try:
         result = generate_upload_url(
             data.filename, data.content_type, file_size=data.file_size
@@ -447,6 +522,7 @@ def add_comment(
     db: Session = Depends(get_db),
 ):
     _get_observation_for_read(obs_id, user, db)
+    _reject_personal_data_text(data.text, field_name="Комментарий")
     comment = ObservationComment(
         observation_id=obs_id,
         user_id=user.id,

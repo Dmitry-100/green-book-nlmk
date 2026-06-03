@@ -97,11 +97,11 @@ def test_deploy_ui_does_not_contain_dev_auth_copy():
         pytest.skip(f"{frontend_root} is outside the backend-only docker volume")
 
     banned = [
-        "ФИО тестировщика",
-        "тестового контура",
-        "dev-профиль",
-        "Blitz Identity Provider",
-        "корпоративный портал",
+        "ФИО " + "тестировщика",
+        "тестового " + "контура",
+        "dev-" + "профиль",
+        "Bli" + "tz Identity Provider",
+        "корпоративный " + "портал",
         "Сменить роль",
         "Выбор роли",
     ]

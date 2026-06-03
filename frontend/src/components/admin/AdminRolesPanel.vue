@@ -4,7 +4,7 @@
       <div>
         <h2>Пользователи и роли</h2>
         <p class="admin-hint">
-          Новые учетные записи получают роль сотрудника и начинают работать после подтверждения.
+          Новые учетные записи получают роль сотрудника сразу после регистрации.
         </p>
       </div>
       <button type="button" class="refresh-button" :disabled="loading" @click="loadUsers">
@@ -28,7 +28,7 @@
     <p v-if="message" class="panel-message" :class="{ error: hasError }">{{ message }}</p>
 
     <div v-if="loading" class="empty-state">Загружаем пользователей...</div>
-    <div v-else-if="users.length === 0" class="empty-state">Заявок и пользователей нет.</div>
+    <div v-else-if="users.length === 0" class="empty-state">Пользователей нет.</div>
     <div v-else class="users-table">
       <div class="users-table__head">
         <span>Пользователь</span>
@@ -55,23 +55,6 @@
           <option value="admin">Администратор</option>
         </select>
         <div class="row-actions">
-          <button
-            v-if="user.approval_status !== 'approved'"
-            type="button"
-            :disabled="actionLoading === user.id"
-            @click="approve(user)"
-          >
-            Подтвердить
-          </button>
-          <button
-            v-if="user.approval_status !== 'rejected'"
-            type="button"
-            class="secondary"
-            :disabled="actionLoading === user.id"
-            @click="reject(user)"
-          >
-            Отклонить
-          </button>
           <button
             v-if="auth.isAdmin() && user.is_active"
             type="button"
@@ -111,13 +94,12 @@ const loading = ref(false)
 const actionLoading = ref<number | null>(null)
 const message = ref('')
 const hasError = ref(false)
-const approvalStatus = ref<ApprovalStatus | 'all'>('pending')
+const approvalStatus = ref<ApprovalStatus | 'all'>('all')
 
 const statusFilters: Array<{ value: ApprovalStatus | 'all'; label: string }> = [
-  { value: 'pending', label: 'Ожидают' },
-  { value: 'approved', label: 'Подтверждены' },
-  { value: 'rejected', label: 'Отклонены' },
   { value: 'all', label: 'Все' },
+  { value: 'approved', label: 'Активные' },
+  { value: 'rejected', label: 'Отключенные' },
 ]
 
 function readError(error: unknown, fallback: string): string {
@@ -173,22 +155,6 @@ async function runAction(user: UserItem, action: () => Promise<unknown>, success
   } finally {
     actionLoading.value = null
   }
-}
-
-async function approve(user: UserItem) {
-  await runAction(
-    user,
-    () => api.post(`/admin/users/${user.id}/approve`),
-    'Пользователь подтвержден.'
-  )
-}
-
-async function reject(user: UserItem) {
-  await runAction(
-    user,
-    () => api.post(`/admin/users/${user.id}/reject`),
-    'Пользователь отклонен.'
-  )
 }
 
 async function deactivate(user: UserItem) {

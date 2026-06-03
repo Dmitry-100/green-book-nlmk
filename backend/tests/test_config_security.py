@@ -14,6 +14,7 @@ def test_production_config_validation_passes_with_secure_values():
         minio_root_user="prod-minio-user",
         minio_root_password="prod-minio-pass",
         cors_origins=["https://greenbook.nlmk.example"],
+        media_direct_upload_enabled=False,
     )
 
     settings.validate_production_config()

@@ -4,7 +4,11 @@ import re
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.user import UserApprovalStatus, UserRole
-from app.services.user_privacy import build_public_name
+from app.services.user_privacy import (
+    build_public_name,
+    contains_email_or_phone,
+    contains_reserved_display_word,
+)
 
 _LOGIN_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 
@@ -29,9 +33,9 @@ class RegisterRequest(BaseModel):
 
     login: str = Field(min_length=3, max_length=64)
     password: str = Field(min_length=8, max_length=128)
-    display_name: str = Field(min_length=2, max_length=255)
-    email: str | None = Field(default=None, max_length=255)
+    display_name: str = Field(min_length=2, max_length=80)
     personal_data_notice_accepted: bool = False
+    privacy_notice_version: str = Field(min_length=1, max_length=50)
 
     @field_validator("login")
     @classmethod
@@ -47,14 +51,10 @@ class RegisterRequest(BaseModel):
         normalized = normalize_display_name(value)
         if len(normalized) < 2:
             raise ValueError("Display name is too short")
-        return normalized
-
-    @field_validator("email")
-    @classmethod
-    def _validate_email(cls, value: str | None) -> str | None:
-        normalized = normalize_email(value)
-        if normalized is not None and "@" not in normalized:
-            raise ValueError("Email must contain @")
+        if contains_email_or_phone(normalized):
+            raise ValueError("Display name must not contain email or phone")
+        if contains_reserved_display_word(normalized):
+            raise ValueError("Display name must not contain service role words")
         return normalized
 
 

@@ -16,8 +16,8 @@ from app.models.gamification import (
 
 
 DEMO_USERS = [
-    {"external_id": "dev-employee-employee", "display_name": "Дмитрий Максимович Сотников", "email": "employee@nlmk.com", "role": "employee"},
-    {"external_id": "dev-ecologist-ecologist", "display_name": "Эколог Тестовый", "email": "ecologist@nlmk.com", "role": "ecologist"},
+    {"external_id": "dev-employee-employee", "display_name": "Тестовый пользователь", "email": None, "role": "employee"},
+    {"external_id": "dev-ecologist-ecologist", "display_name": "Тестовый эколог", "email": None, "role": "ecologist"},
 ]
 
 DEMO_OBSERVATIONS = [

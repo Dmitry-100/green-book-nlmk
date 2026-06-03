@@ -82,8 +82,8 @@ def test_existing_dev_user_display_name_is_aligned_with_token(client, db, monkey
     monkeypatch.setattr(settings, "app_env", "development")
     user = User(
         external_id="dev-employee-employee",
-        display_name="Сотников Д.С.",
-        email="employee@nlmk.com",
+        display_name="Старое демо-имя",
+        email="employee@example.local",
         role=UserRole.employee,
     )
     db.add(user)
@@ -92,7 +92,7 @@ def test_existing_dev_user_display_name_is_aligned_with_token(client, db, monkey
     token = make_token(
         external_id="dev-employee-employee",
         name="Dev employee",
-        email="employee@nlmk.com",
+        email="employee@example.local",
         role="employee",
     )
 
@@ -102,7 +102,7 @@ def test_existing_dev_user_display_name_is_aligned_with_token(client, db, monkey
     )
 
     assert response.status_code == 200
-    assert response.json()["display_name"] == "Дмитрий Максимович Сотников"
+    assert response.json()["display_name"] == "Тестовый пользователь"
 
 
 def test_dev_user_can_reenter_with_same_email_and_new_role(client, db, monkeypatch):

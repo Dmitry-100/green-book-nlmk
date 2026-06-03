@@ -199,6 +199,22 @@ def _run_write_workflow(base_url: str, *, admin_token: str) -> list[CheckResult]
     display_name = "Smoke Test User"
 
     try:
+        notice_status, notice_payload = _json_request(
+            base_url,
+            "/api/privacy/notice",
+        )
+        notice_version = notice_payload.get("version")
+        checks.append(
+            CheckResult(
+                "/api/privacy/notice",
+                notice_status,
+                notice_status == 200 and bool(notice_version),
+                "loaded privacy notice version" if notice_version else "missing privacy notice version",
+            )
+        )
+        if not notice_version:
+            return checks
+
         status, payload = _json_request(
             base_url,
             "/api/auth/register",
@@ -208,6 +224,7 @@ def _run_write_workflow(base_url: str, *, admin_token: str) -> list[CheckResult]
                 "password": password,
                 "display_name": display_name,
                 "personal_data_notice_accepted": True,
+                "privacy_notice_version": notice_version,
             },
         )
         user_id = payload.get("user", {}).get("id")
@@ -218,33 +235,14 @@ def _run_write_workflow(base_url: str, *, admin_token: str) -> list[CheckResult]
         CheckResult(
             "/api/auth/register",
             status,
-            status == 201 and bool(user_id),
-            "registered pending user" if user_id else f"unexpected payload={payload}",
+            status == 201
+            and bool(user_id)
+            and payload.get("user", {}).get("approval_status") == "approved",
+            "registered approved user" if user_id else f"unexpected payload={payload}",
         )
     )
     if not user_id:
         return checks
-
-    for path in (
-        f"/api/admin/users/{user_id}/approve",
-        f"/api/admin/users/{user_id}/anonymize",
-    ):
-        if path.endswith("/anonymize"):
-            continue
-        status, payload = _json_request(
-            base_url,
-            path,
-            method="POST",
-            bearer_token=admin_token,
-        )
-        checks.append(
-            CheckResult(
-                path,
-                status,
-                status == 200 and payload.get("approval_status") == "approved",
-                "approved smoke user",
-            )
-        )
 
     status, payload = _json_request(
         base_url,
@@ -294,6 +292,8 @@ def _run_write_workflow(base_url: str, *, admin_token: str) -> list[CheckResult]
             "lon": 39.5924,
             "comment": "Post-deploy smoke observation",
             "safety_checked": True,
+            "content_notice_accepted": True,
+            "content_notice_version": notice_version,
         },
     )
     obs_id = obs_payload.get("id")
@@ -444,7 +444,7 @@ def main() -> int:
     parser.add_argument(
         "--exercise-write-workflow",
         action="store_true",
-        help="Register, approve, submit and confirm a smoke observation (writes data)",
+        help="Register, login, submit and confirm a smoke observation (writes data)",
     )
     parser.add_argument(
         "--fail-on-ops-alerts",

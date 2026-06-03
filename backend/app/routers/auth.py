@@ -1,8 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from jose import jwt
-from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
@@ -15,11 +14,9 @@ from app.schemas.auth import (
     RegisterRequest,
     RegisterResponse,
     UserResponse,
-    normalize_email,
 )
 from app.services.audit import audit_event
 from app.services.passwords import hash_password, verify_password
-from app.services.user_privacy import mask_email
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -31,32 +28,23 @@ def _create_access_token(user: User) -> str:
     expires_at = now + timedelta(minutes=settings.auth_access_token_expire_minutes)
     payload = {
         "sub": user.external_id,
-        "name": user.display_name,
-        "email": user.email,
         "iat": int(now.timestamp()),
         "exp": int(expires_at.timestamp()),
+        "typ": "access",
     }
     return jwt.encode(payload, settings.auth_secret_key, algorithm=settings.auth_algorithm)
 
 
 def _login_lookup(login: str, db: Session) -> User | None:
-    normalized_email = normalize_email(login)
-    return (
-        db.query(User)
-        .filter(or_(User.login == login, User.email == normalized_email))
-        .first()
-    )
+    return db.query(User).filter(User.login == login).first()
 
 
 def _ensure_registration_is_unique(data: RegisterRequest, db: Session) -> None:
-    filters = [User.login == data.login]
-    if data.email:
-        filters.append(User.email == data.email)
-    existing = db.query(User.id).filter(or_(*filters)).first()
+    existing = db.query(User.id).filter(User.login == data.login).first()
     if existing is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Пользователь с таким логином или email уже существует",
+            detail="Пользователь с таким логином уже существует",
         )
 
 
@@ -67,18 +55,28 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Необходимо подтвердить уведомление об обработке персональных данных",
         )
+    if data.privacy_notice_version != settings.privacy_notice_version:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Версия уведомления об обработке данных устарела. Обновите страницу.",
+        )
 
     _ensure_registration_is_unique(data, db)
+    now = datetime.now(timezone.utc)
     user = User(
         external_id=f"local:{data.login}",
         login=data.login,
         password_hash=hash_password(data.password),
         display_name=data.display_name,
-        email=data.email,
+        email=None,
         role=UserRole.employee,
-        approval_status=UserApprovalStatus.pending,
+        approval_status=UserApprovalStatus.approved,
         is_active=True,
         must_change_password=False,
+        approved_at=now,
+        approved_by_id=None,
+        privacy_notice_version=data.privacy_notice_version,
+        privacy_notice_accepted_at=now,
     )
     db.add(user)
     db.commit()
@@ -88,26 +86,30 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
         actor=user,
         target_type="user",
         target_id=user.id,
-        details={"login": user.login, "email": mask_email(user.email)},
+        details={"login": user.login, "privacy_notice_version": data.privacy_notice_version},
         db=db,
     )
     return RegisterResponse(
         user=UserResponse.from_user(user),
-        message="Заявка создана и ожидает подтверждения экологом или администратором.",
+        message="Регистрация завершена. Можно войти.",
     )
 
 
 @router.post("/login", response_model=AuthTokenResponse)
-def login(data: LoginRequest, db: Session = Depends(get_db)):
+def login(
+    data: LoginRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+):
     user = _login_lookup(data.login, db)
-    if user is None or not verify_password(data.password, user.password_hash):
+    if user is None or not user.password_hash or not verify_password(data.password, user.password_hash):
         audit_event(
             action="auth.login",
             actor=None,
             target_type="user",
             outcome="failure",
             details={
-                "login": mask_email(data.login) if "@" in data.login else data.login,
+                "login": data.login,
                 "reason": "invalid_credentials",
             },
             db=db,
@@ -132,22 +134,13 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
             detail="Учетная запись отключена или отклонена.",
         )
 
+    now = datetime.now(timezone.utc)
     if user.approval_status == UserApprovalStatus.pending:
-        audit_event(
-            action="auth.login",
-            actor=user,
-            target_type="user",
-            target_id=user.id,
-            outcome="failure",
-            details={"reason": "pending_approval"},
-            db=db,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Заявка ожидает подтверждения экологом или администратором.",
-        )
+        user.approval_status = UserApprovalStatus.approved
+        user.approved_at = now
+        user.approved_by_id = None
 
-    user.last_login_at = datetime.now(timezone.utc)
+    user.last_login_at = now
     db.commit()
     db.refresh(user)
     audit_event(
@@ -159,6 +152,14 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
         db=db,
     )
     token = _create_access_token(user)
+    response.set_cookie(
+        "gb_session",
+        token,
+        max_age=settings.auth_access_token_expire_minutes * 60,
+        httponly=True,
+        secure=settings.app_env != "development",
+        samesite="lax",
+    )
     return AuthTokenResponse(
         access_token=token,
         token=token,
@@ -167,13 +168,23 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/logout")
-def logout(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def logout(
+    response: Response,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     audit_event(
         action="auth.logout",
         actor=user,
         target_type="user",
         target_id=user.id,
         db=db,
+    )
+    response.delete_cookie(
+        "gb_session",
+        httponly=True,
+        secure=settings.app_env != "development",
+        samesite="lax",
     )
     return {"ok": True}
 

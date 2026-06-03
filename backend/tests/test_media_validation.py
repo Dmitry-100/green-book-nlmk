@@ -46,6 +46,29 @@ def test_upload_url_rejects_large_files(client):
     assert response.json()["detail"] == "File is too large"
 
 
+def test_upload_url_can_be_disabled_for_production_style_uploads(client, monkeypatch):
+    token = make_token(
+        external_id="media-test-direct-disabled",
+        name="Media Test",
+        email="media-test-direct-disabled@nlmk.com",
+        role="employee",
+    )
+    monkeypatch.setattr(observations_router.settings, "media_direct_upload_enabled", False)
+
+    response = client.post(
+        "/api/observations/upload-url",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "filename": "bird.jpg",
+            "content_type": "image/jpeg",
+            "file_size": 128,
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Direct media upload is disabled"
+
+
 def test_backend_upload_accepts_file_without_exposing_storage_url(client, monkeypatch):
     token = make_token(
         external_id="media-test-003",

@@ -22,6 +22,8 @@ class ObservationCreate(BaseModel):
     incident_type: IncidentType | None = None
     incident_severity: IncidentSeverity | None = None
     safety_checked: bool = False
+    content_notice_accepted: bool = False
+    content_notice_version: str | None = Field(default=None, max_length=50)
 
     @model_validator(mode="after")
     def validate_incident_fields(self):
@@ -58,7 +60,7 @@ class MediaInfo(BaseModel):
 
 class ObservationResponse(BaseModel):
     id: int
-    author_id: int
+    author_id: int | None
     species_id: int | None
     group: str
     observed_at: datetime

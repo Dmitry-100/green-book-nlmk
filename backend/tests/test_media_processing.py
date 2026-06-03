@@ -55,6 +55,36 @@ def test_optimize_image_object_rejects_invalid_payload(monkeypatch):
         media.optimize_image_object("observations/broken.jpg", "image/jpeg")
 
 
+def test_store_uploaded_file_rejects_invalid_image_before_storage(monkeypatch):
+    client = FakeS3Client(b"")
+    monkeypatch.setattr(media, "get_s3_client", lambda: client)
+
+    with pytest.raises(ValueError, match="not a valid image"):
+        media.store_uploaded_file("broken.jpg", "image/jpeg", b"not-an-image")
+
+    assert client.put_calls == []
+
+
+def test_store_uploaded_file_rewrites_image_payload_without_exif(monkeypatch):
+    client = FakeS3Client(b"")
+    monkeypatch.setattr(media, "get_s3_client", lambda: client)
+    image = Image.new("RGB", (64, 32), color=(12, 130, 220))
+    exif = image.getexif()
+    exif[0x010E] = "sensitive description"
+    buffer = io.BytesIO()
+    image.save(buffer, format="JPEG", exif=exif.tobytes())
+
+    result = media.store_uploaded_file("bird.jpg", "image/jpeg", buffer.getvalue())
+
+    assert result["s3_key"].startswith("observations/")
+    assert result["content_type"] == "image/jpeg"
+    assert len(client.put_calls) == 1
+    with Image.open(io.BytesIO(client.put_calls[0]["Body"])) as stored:
+        assert stored.format == "JPEG"
+        assert stored.size == (64, 32)
+        assert stored.getexif().get(0x010E) is None
+
+
 def test_optimize_image_object_skips_non_image_types(monkeypatch):
     client = FakeS3Client(b"text")
     monkeypatch.setattr(media, "get_s3_client", lambda: client)

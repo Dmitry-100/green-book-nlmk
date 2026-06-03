@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     media_max_image_pixels: int = Field(default=24_000_000, ge=1_000_000, le=200_000_000)
     media_thumbnail_size: int = Field(default=400, ge=64, le=2048)
     media_async_processing_enabled: bool = True
+    media_direct_upload_enabled: bool = True
     media_processing_batch_size: int = Field(default=20, ge=1, le=500)
     media_processing_max_attempts: int = Field(default=3, ge=1, le=20)
     media_processing_retry_backoff_seconds: int = Field(default=30, ge=1, le=3600)
@@ -67,6 +68,21 @@ class Settings(BaseSettings):
     validation_queue_cache_ttl_seconds: int = 15
     notification_unread_cache_ttl_seconds: int = 10
     audit_log_retention_days: int = Field(default=180, ge=1, le=36500)
+    unattached_media_retention_hours: int = Field(default=24, ge=1, le=24 * 365)
+    rejected_observation_media_retention_days: int = Field(default=90, ge=1, le=36500)
+    privacy_notice_version: str = "2026-06-03"
+    privacy_operator_name: str = "ПАО «НЛМК»"
+    privacy_processing_purpose: str = (
+        "Регистрация пользователя, прием наблюдений, модерация, служебный аудит "
+        "и обратная связь по отправленным материалам."
+    )
+    privacy_retention_text: str = (
+        "Учетная запись хранится до удаления или обезличивания администратором; "
+        "журнал аудита хранится согласно настройке AUDIT_LOG_RETENTION_DAYS."
+    )
+    privacy_contact_text: str = (
+        "По вопросам обработки данных обратитесь к владельцу сервиса или администратору системы."
+    )
     ops_alert_on_review_threshold: int = Field(default=100, ge=0, le=1_000_000)
     ops_alert_open_incidents_threshold: int = Field(default=0, ge=0, le=1_000_000)
     ops_alert_error_rate_percent_threshold: float = Field(default=5.0, ge=0.0, le=100.0)
@@ -115,6 +131,8 @@ class Settings(BaseSettings):
             problems.append("CORS_ORIGINS must not be empty")
         if "*" in self.cors_origins:
             problems.append("CORS_ORIGINS cannot contain wildcard in non-development")
+        if self.media_direct_upload_enabled:
+            problems.append("MEDIA_DIRECT_UPLOAD_ENABLED must be false outside development")
         if self.bootstrap_admin_login and not self.bootstrap_admin_password:
             problems.append("BOOTSTRAP_ADMIN_PASSWORD is required when BOOTSTRAP_ADMIN_LOGIN is set")
         if self.bootstrap_admin_password and len(self.bootstrap_admin_password) < 12:

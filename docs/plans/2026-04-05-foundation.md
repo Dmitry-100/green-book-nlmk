@@ -4,7 +4,7 @@
 
 **Goal:** Create the project skeleton — Docker environment, PostgreSQL+PostGIS database, SQLAlchemy models, Alembic migrations, FastAPI app with auth middleware, and Vue.js frontend scaffold.
 
-**Architecture:** Monorepo with `backend/` (Python FastAPI) and `frontend/` (Vue 3 + Vite). Docker Compose orchestrates PostgreSQL+PostGIS, Redis, MinIO, and the app services. Auth via JWT token validation (Blitz SSO mock for dev).
+**Architecture:** Monorepo with `backend/` (Python FastAPI) and `frontend/` (Vue 3 + Vite). Docker Compose orchestrates PostgreSQL+PostGIS, Redis, MinIO, and the app services. Auth via JWT token validation with a local development identity mock.
 
 **Tech Stack:** Python 3.12, FastAPI, SQLAlchemy 2.0, GeoAlchemy2, Alembic, PostgreSQL 16 + PostGIS 3.4, Redis, MinIO, Vue 3, Vite, TypeScript, Pinia, Vue Router
 
@@ -857,7 +857,7 @@ def get_current_user(
 
     user = db.query(User).filter(User.external_id == external_id).first()
     if user is None:
-        # Auto-create user on first login (from SSO data)
+        # Auto-create user on first login from external identity data.
         user = User(
             external_id=external_id,
             display_name=payload.get("name", "Unknown"),

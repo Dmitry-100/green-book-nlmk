@@ -9,7 +9,7 @@ router = APIRouter(prefix="/api/dev", tags=["dev-auth"])
 @router.post("/token")
 def generate_dev_token(
     name: str = "Сотрудник Тестовый",
-    email: str = "test@nlmk.com",
+    email: str = "test@example.local",
     role: str = "employee",
 ):
     """Generate a dev JWT token. Only available in development mode."""
