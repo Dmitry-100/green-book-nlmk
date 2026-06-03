@@ -117,8 +117,8 @@ const hasError = ref(false)
 const privacyNoticeVersion = ref('')
 const privacyNoticeText = computed(() => (
   privacyNoticeVersion.value
-    ? `версия ${privacyNoticeVersion.value}; данные нужны для входа, наблюдений и служебного аудита.`
-    : 'данные нужны для входа, наблюдений и служебного аудита.'
+    ? `версия ${privacyNoticeVersion.value}; данные нужны для входа, обработки наблюдений и участия в рейтинге.`
+    : 'данные нужны для входа, обработки наблюдений и участия в рейтинге.'
 ))
 
 const loginForm = reactive({
