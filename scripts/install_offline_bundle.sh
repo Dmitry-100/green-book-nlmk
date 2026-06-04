@@ -65,6 +65,54 @@ if [[ ! -f ".env" ]]; then
   exit 1
 fi
 
+export_manifest_value_if_missing() {
+  local key="$1"
+  local env_value=""
+  local manifest_value=""
+
+  if [[ -n "${!key:-}" ]]; then
+    return
+  fi
+
+  env_value="$(
+    awk -F= -v key="$key" '
+      $0 !~ /^[[:space:]]*#/ && $1 == key {
+        sub(/^[^=]*=/, "")
+        gsub(/^"|"$/, "")
+        gsub(/^'\''|'\''$/, "")
+        print
+      }
+    ' .env | tail -n 1
+  )"
+  if [[ -n "$env_value" ]]; then
+    return
+  fi
+
+  if [[ -f "manifest.env" ]]; then
+    manifest_value="$(
+      awk -F= -v key="$key" '
+        $0 !~ /^[[:space:]]*#/ && $1 == key {
+          sub(/^[^=]*=/, "")
+          gsub(/^"|"$/, "")
+          gsub(/^'\''|'\''$/, "")
+          print
+        }
+      ' manifest.env | tail -n 1
+    )"
+  fi
+
+  if [[ -n "$manifest_value" ]]; then
+    export "$key=$manifest_value"
+    echo "Using $key from manifest.env: $manifest_value"
+  fi
+}
+
+export_manifest_value_if_missing BACKEND_IMAGE
+export_manifest_value_if_missing FRONTEND_IMAGE
+export_manifest_value_if_missing DB_IMAGE
+export_manifest_value_if_missing REDIS_IMAGE
+export_manifest_value_if_missing MINIO_IMAGE
+
 COMPOSE=(docker compose -f "$COMPOSE_FILE" --env-file .env)
 
 normalize_arch() {
@@ -135,7 +183,7 @@ done
 "${COMPOSE[@]}" exec -T db pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null
 
 echo "Waiting for Redis and MinIO TCP ports..."
-"${COMPOSE[@]}" run --rm --no-deps backend python - <<'PY'
+"${COMPOSE[@]}" run -T --rm --no-deps backend python - <<'PY'
 import socket
 import sys
 import time
@@ -160,14 +208,14 @@ if [[ "$RUN_MIGRATIONS" == "true" ]]; then
   "${COMPOSE[@]}" exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "CREATE EXTENSION IF NOT EXISTS postgis;"
 
   echo "Applying Alembic migrations..."
-  "${COMPOSE[@]}" run --rm backend alembic upgrade head
+  "${COMPOSE[@]}" run -T --rm backend alembic upgrade head
 fi
 
 if [[ "$RUN_SEED" == "true" ]]; then
   echo "Seeding catalog and reference data..."
-  "${COMPOSE[@]}" run --rm backend python -m app.seed.run_seed
-  "${COMPOSE[@]}" run --rm backend python -m app.seed.seed_tree
-  "${COMPOSE[@]}" run --rm backend python -m app.seed.seed_achievements
+  "${COMPOSE[@]}" run -T --rm backend python -m app.seed.run_seed
+  "${COMPOSE[@]}" run -T --rm backend python -m app.seed.seed_tree
+  "${COMPOSE[@]}" run -T --rm backend python -m app.seed.seed_achievements
 fi
 
 echo "Starting application..."

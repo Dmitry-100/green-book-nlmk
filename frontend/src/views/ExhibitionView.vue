@@ -29,8 +29,6 @@
             :alt="item.alt"
             loading="lazy"
             decoding="async"
-            draggable="false"
-            @contextmenu.prevent
           />
           <div class="exhibition-card__body">
             <div class="exhibition-card__meta">

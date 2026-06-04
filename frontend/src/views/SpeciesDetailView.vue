@@ -18,7 +18,6 @@
             class="detail-gallery__photo"
             :src="primaryPhotoUrl"
             :alt="species.name_ru"
-            draggable="false"
           />
           <div class="detail-gallery__no-photo" v-else>{{ groupIcon }}</div>
           <div class="detail-gallery__badges">
@@ -180,7 +179,6 @@
             v-if="observation.media?.length"
             class="species-observation-card__thumb"
             :style="{ backgroundImage: `url(${observationPreviewUrl(observation)})` }"
-            @contextmenu.prevent
           ></div>
           <div v-else class="species-observation-card__icon">{{ groupIcon }}</div>
           <div class="species-observation-card__body">

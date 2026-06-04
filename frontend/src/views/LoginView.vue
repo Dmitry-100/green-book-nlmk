@@ -2,7 +2,7 @@
   <div class="login-page">
     <div class="login-card">
       <div class="login-header">
-        <img src="/logo-nlmk.svg" alt="НЛМК" class="login-logo" draggable="false" @contextmenu.prevent />
+        <img src="/logo-nlmk.svg" alt="НЛМК" class="login-logo" />
         <h1>Зелёная книга</h1>
         <p>Вход нужен для наблюдений и личных разделов.</p>
       </div>

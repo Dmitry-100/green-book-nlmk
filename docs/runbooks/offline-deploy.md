@@ -66,6 +66,13 @@ vi .env
 - `CORS_ORIGINS`
 - `YMAPS_API_KEY`
 
+`BACKEND_IMAGE`, `FRONTEND_IMAGE`, `DB_IMAGE`, `REDIS_IMAGE` и `MINIO_IMAGE`
+обычно уже попадают в `.env.offline.example` при сборке пакета. Если `.env`
+создавался вручную и эти значения пропущены, `install.sh` возьмёт их из
+`manifest.env` рядом с архивом. Не подставляйте placeholder вида
+`your-registry/...`, если установка идёт через `docker load` из offline-пакета:
+нужны ровно те имена образов, которые указаны в `manifest.env`.
+
 Запустить:
 
 ```bash
@@ -124,3 +131,6 @@ python3 scripts/release_smoke.py \
 - `docker-compose.offline.yml` использует `pull_policy: never`, поэтому при
   отсутствии образа запуск должен упасть сразу, а не пытаться идти во внешний
   registry.
+- `install.sh` выполняет одноразовые команды через `docker compose run -T`.
+  Это важно для серверов, где скрипт запускается без интерактивного TTY; без
+  `-T` Docker Compose может завершиться ошибкой `the input device is not a TTY`.

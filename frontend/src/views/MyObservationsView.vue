@@ -24,7 +24,6 @@
           class="obs-item__thumb"
           v-if="obs.media?.length"
           :style="{ backgroundImage: `url(/api/media/${observationPreviewMediaKey(obs)})` }"
-          @contextmenu.prevent
         ></div>
         <div class="obs-item__icon" v-else>{{ groupIcon(obs.group) }}</div>
         <div class="obs-item__info">

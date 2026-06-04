@@ -18,7 +18,7 @@
                :class="{ selected: form.group === g.value }"
                @click="form.group = g.value"
                :style="{ backgroundImage: `linear-gradient(to top, rgba(27,77,79,0.88) 0%, rgba(27,77,79,0.3) 60%, transparent 100%), url(${g.photo})` }"
-               @contextmenu.prevent>
+              >
             <span class="obs-group-card__label">{{ g.label }}</span>
           </div>
         </div>
@@ -80,7 +80,7 @@
         <div class="form-section__title">Фото *</div>
         <div class="photo-upload-area">
           <div v-for="(photo, i) in photos" :key="i" class="photo-preview">
-            <img :src="photo.preview" alt="photo" draggable="false" @contextmenu.prevent />
+            <img :src="photo.preview" alt="photo" />
             <button class="photo-remove" @click.prevent="photos.splice(i, 1)">&times;</button>
           </div>
           <label class="photo-add">

@@ -176,7 +176,6 @@
             class="news-item__thumb"
             v-if="o.media?.length"
             :style="{ backgroundImage: `url(/api/media/${observationPreviewMediaKey(o)})` }"
-            @contextmenu.prevent
           ></div>
           <div class="news-item__icon" v-else>{{ groupIcon(o.group) }}</div>
           <div class="news-item__body">

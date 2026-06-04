@@ -22,7 +22,7 @@
       </div>
 
       <!-- Photo -->
-      <div v-if="photoUrl" class="obs-photo" :style="{ backgroundImage: `url(${photoUrl})` }" @contextmenu.prevent></div>
+      <div v-if="photoUrl" class="obs-photo" :style="{ backgroundImage: `url(${photoUrl})` }"></div>
 
       <p v-if="obs.comment" class="obs-comment">{{ obs.comment }}</p>
 
