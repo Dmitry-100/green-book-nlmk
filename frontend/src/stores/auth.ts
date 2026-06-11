@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { clearCachedGets } from '../api/client'
 
 interface UserInfo {
   id: number
@@ -36,6 +37,9 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = null
     localStorage.removeItem('auth_token')
     localStorage.removeItem('auth_user')
+    // Кэш GET-ответов может содержать привилегированные данные предыдущего
+    // пользователя — сбрасываем вместе с сессией.
+    clearCachedGets()
   }
 
   function isEcologist() {

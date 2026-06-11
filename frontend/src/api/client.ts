@@ -15,6 +15,28 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status: number | undefined = error?.response?.status
+    const url: string = error?.config?.url ?? ''
+    // 401 вне auth-эндпоинтов означает протухшую сессию: чистим состояние
+    // (включая кэш) и уводим на логин, чтобы не оставались данные и PII
+    // предыдущего пользователя.
+    if (status === 401 && !url.startsWith('/auth/')) {
+      const auth = useAuthStore()
+      auth.clearSession()
+      if (window.location.pathname !== '/login') {
+        const redirect = encodeURIComponent(
+          window.location.pathname + window.location.search
+        )
+        window.location.assign(`/login?redirect=${redirect}`)
+      }
+    }
+    return Promise.reject(error)
+  }
+)
+
 type CacheEntry = {
   expiresAt: number
   data: unknown
