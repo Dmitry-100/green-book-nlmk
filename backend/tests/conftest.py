@@ -1,3 +1,13 @@
+import os
+
+# Должно быть выставлено до импорта app.config: с fail-closed дефолтом
+# (APP_ENV=production) приложение без явного окружения не пройдёт
+# validate_production_config на dev-значениях.
+os.environ.setdefault("APP_ENV", "test")
+# Интеграционные тесты логинятся десятки раз за окно — жёсткий auth-лимит
+# проверяется отдельными юнит-тестами middleware.
+os.environ.setdefault("AUTH_RATE_LIMIT_PER_MINUTE", "10000")
+
 import pytest
 import redis
 from fastapi.testclient import TestClient

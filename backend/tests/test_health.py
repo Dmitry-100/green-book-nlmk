@@ -25,6 +25,16 @@ def test_readiness_endpoint_is_available(client):
         assert "dependency_details" in data["detail"]
 
 
+def test_security_headers_present(client):
+    response = client.get("/api/health")
+    assert response.headers["x-robots-tag"] == "noindex, nofollow"
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "DENY"
+    assert response.headers["referrer-policy"] == "same-origin"
+    # HSTS не выставляется в development/test
+    assert "strict-transport-security" not in response.headers
+
+
 def test_health_response_has_request_id(client):
     response = client.get("/api/health")
     assert response.status_code == 200

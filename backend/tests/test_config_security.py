@@ -6,6 +6,24 @@ from app.config import Settings
 pytestmark = pytest.mark.no_db
 
 
+def test_default_settings_are_fail_closed(monkeypatch):
+    monkeypatch.delenv("APP_ENV", raising=False)
+    monkeypatch.delenv("ENABLE_DEV_AUTH", raising=False)
+
+    settings = Settings(_env_file=None)
+
+    assert settings.app_env == "production"
+    assert settings.enable_dev_auth is False
+    with pytest.raises(RuntimeError):
+        settings.validate_production_config()
+
+
+def test_test_env_skips_production_validation():
+    settings = Settings(_env_file=None, app_env="test")
+
+    settings.validate_production_config()
+
+
 def test_production_config_validation_passes_with_secure_values():
     settings = Settings(
         app_env="production",

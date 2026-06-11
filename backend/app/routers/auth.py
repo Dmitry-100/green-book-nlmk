@@ -157,7 +157,7 @@ def login(
         token,
         max_age=settings.auth_access_token_expire_minutes * 60,
         httponly=True,
-        secure=settings.app_env != "development",
+        secure=settings.app_env not in {"development", "test"},
         samesite="lax",
     )
     return AuthTokenResponse(
@@ -183,7 +183,7 @@ def logout(
     response.delete_cookie(
         "gb_session",
         httponly=True,
-        secure=settings.app_env != "development",
+        secure=settings.app_env not in {"development", "test"},
         samesite="lax",
     )
     return {"ok": True}

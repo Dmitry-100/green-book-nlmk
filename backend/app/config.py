@@ -39,11 +39,12 @@ class Settings(BaseSettings):
     bootstrap_admin_password: str | None = None
     bootstrap_admin_display_name: str | None = None
     bootstrap_admin_email: str | None = None
-    app_env: str = "development"
+    # Fail-closed: без явного APP_ENV=development применяются production-проверки.
+    app_env: str = "production"
     cors_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: ["http://localhost:5173"]
     )
-    enable_dev_auth: bool = True
+    enable_dev_auth: bool = False
     media_max_upload_bytes: int = 10 * 1024 * 1024
     media_max_image_dimension: int = Field(default=2560, ge=256, le=8192)
     media_max_image_pixels: int = Field(default=24_000_000, ge=1_000_000, le=200_000_000)
@@ -58,6 +59,8 @@ class Settings(BaseSettings):
         default_factory=lambda: ["image/jpeg", "image/png", "image/webp"]
     )
     api_rate_limit_per_minute: int = 120
+    auth_rate_limit_per_minute: int = Field(default=10, ge=1, le=10_000)
+    api_trusted_proxies: Annotated[list[str], NoDecode] = Field(default_factory=list)
     api_rate_limit_enabled: bool = True
     api_gzip_enabled: bool = True
     api_gzip_minimum_size: int = 1024
@@ -108,7 +111,9 @@ class Settings(BaseSettings):
 
     model_config = {"env_file": ".env"}
 
-    @field_validator("cors_origins", "media_allowed_content_types", mode="before")
+    @field_validator(
+        "cors_origins", "media_allowed_content_types", "api_trusted_proxies", mode="before"
+    )
     @classmethod
     def _coerce_list(cls, value):
         if isinstance(value, str):
@@ -116,7 +121,7 @@ class Settings(BaseSettings):
         return value
 
     def validate_production_config(self) -> None:
-        if self.app_env == "development":
+        if self.app_env in {"development", "test"}:
             return
 
         problems: list[str] = []

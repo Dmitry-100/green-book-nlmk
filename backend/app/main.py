@@ -40,9 +40,16 @@ app = FastAPI(
 
 
 @app.middleware("http")
-async def add_noindex_header(request, call_next):
+async def add_security_headers(request, call_next):
     response = await call_next(request)
     response.headers["X-Robots-Tag"] = "noindex, nofollow"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "same-origin"
+    if settings.app_env not in {"development", "test"}:
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains"
+        )
     return response
 
 
@@ -65,6 +72,8 @@ if settings.api_rate_limit_enabled and settings.api_rate_limit_per_minute > 0:
     app.add_middleware(
         RateLimitMiddleware,
         requests_per_window=settings.api_rate_limit_per_minute,
+        auth_requests_per_window=settings.auth_rate_limit_per_minute,
+        trusted_proxies=tuple(settings.api_trusted_proxies),
     )
 app.include_router(health.router)
 app.include_router(privacy.router)
@@ -82,7 +91,9 @@ app.include_router(media_serve.router)
 app.include_router(gamification.router)
 app.include_router(metrics_router.router)
 
-if settings.app_env == "development" and settings.enable_dev_auth:
+# Dev-роутер монтируется только в development/test; в test нужен для юнит-тестов,
+# где runtime-guard внутри dev_auth дополнительно требует development + флаг.
+if settings.app_env in {"development", "test"}:
     from app.routers import dev_auth
 
     app.include_router(dev_auth.router)
