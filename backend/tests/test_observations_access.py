@@ -219,6 +219,37 @@ def test_list_observations_filters_confirmed_by_species_and_includes_author(clie
     assert payload["items"][0]["author_public_name"] == "O"
 
 
+def test_accessible_species_observations_ignore_stale_optional_session(client, db):
+    author = _create_user(db, external_id="obs-stale-author", email="obs-stale-author@nlmk.com")
+    target_species = _create_species(db, name="Species With Stale Cookie")
+    matching = _create_observation(
+        db,
+        author_id=author.id,
+        group="birds",
+        species_id=target_species.id,
+        status=ObservationStatus.confirmed,
+        comment="public despite stale cookie",
+    )
+    _create_observation(
+        db,
+        author_id=author.id,
+        group="birds",
+        species_id=target_species.id,
+        status=ObservationStatus.on_review,
+        comment="private stays hidden",
+    )
+
+    client.cookies.set("gb_session", "stale.invalid.token")
+    response = client.get(
+        f"/api/observations?species_id={target_species.id}&visibility=accessible"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 1
+    assert [item["id"] for item in payload["items"]] == [matching.id]
+
+
 def test_accessible_species_observations_include_own_private_items(client, db, employee_token):
     author = _create_user(db, external_id="test-user-001", email="test@nlmk.com")
     other = _create_user(db, external_id="obs-species-other", email="obs-species-other@nlmk.com")

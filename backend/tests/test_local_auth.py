@@ -93,6 +93,16 @@ def test_me_accepts_session_cookie(client):
     assert me_response.json()["display_name"] == "CU"
 
 
+def test_logout_clears_stale_session_cookie(client):
+    client.cookies.set("gb_session", "stale.invalid.token")
+
+    response = client.post("/api/auth/logout")
+
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    assert "gb_session=" in response.headers["set-cookie"]
+
+
 def test_register_rejects_email_payload(client):
     response = client.post(
         "/api/auth/register",

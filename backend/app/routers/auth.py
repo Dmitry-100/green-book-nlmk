@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from jose import jwt
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user
+from app.auth import get_current_user, get_optional_user
 from app.config import settings
 from app.database import get_db
 from app.models.user import User, UserApprovalStatus, UserRole
@@ -170,14 +170,14 @@ def login(
 @router.post("/logout")
 def logout(
     response: Response,
-    user: User = Depends(get_current_user),
+    user: User | None = Depends(get_optional_user),
     db: Session = Depends(get_db),
 ):
     audit_event(
         action="auth.logout",
         actor=user,
         target_type="user",
-        target_id=user.id,
+        target_id=user.id if user else None,
         db=db,
     )
     response.delete_cookie(

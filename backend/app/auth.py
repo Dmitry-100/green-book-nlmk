@@ -175,9 +175,12 @@ def get_optional_user(
     token = credentials.credentials if credentials is not None else request.cookies.get("gb_session")
     if not token:
         return None
-    payload = _decode_token(token)
-    user = _get_or_create_user(payload, db)
-    _ensure_user_can_authenticate(user)
+    try:
+        payload = _decode_token(token)
+        user = _get_or_create_user(payload, db)
+        _ensure_user_can_authenticate(user)
+    except HTTPException:
+        return None
     return _set_user_context(user)
 
 
