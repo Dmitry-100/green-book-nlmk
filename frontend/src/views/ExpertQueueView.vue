@@ -21,6 +21,9 @@
           <div class="queue-item__info">
             <h4>#{{ obs.id }} — {{ groupLabel(obs.group) }}</h4>
             <p>{{ new Date(obs.observed_at).toLocaleDateString('ru') }} | {{ obs.comment || 'Без комментария' }}</p>
+            <p v-if="obs.unlisted_species_name" class="queue-item__claim">
+              🆕 Заявлен новый вид: «{{ obs.unlisted_species_name }}» — проверьте и при необходимости добавьте в справочник
+            </p>
           </div>
           <span v-if="obs.is_incident" class="incident-badge">Инцидент</span>
         </div>
@@ -200,6 +203,7 @@ onMounted(fetchQueue)
 .queue-item__icon { font-size: 28px; }
 .queue-item__info h4 { font-size: 15px; font-weight: 700; color: #2C3E4A; }
 .queue-item__info p { font-size: 12px; color: #8FA5AB; margin-top: 2px; }
+.queue-item__info p.queue-item__claim { color: #2E7D32; font-weight: 600; }
 .incident-badge { background: rgba(229,57,53,0.1); color: #E53935; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; margin-left: auto; }
 .queue-item__actions { display: flex; gap: 8px; }
 .queue-action {

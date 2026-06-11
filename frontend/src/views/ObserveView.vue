@@ -57,6 +57,16 @@
             </select>
           </div>
         </div>
+        <div class="form-group" style="margin-top:16px" v-if="form.group && !form.species_id">
+          <label>Не нашли вид в справочнике?</label>
+          <input
+            v-model="form.unlisted_species_name"
+            class="native-input"
+            type="text"
+            maxlength="200"
+            placeholder="Укажите название вида — эколог проверит и добавит его в справочник"
+          />
+        </div>
         <div class="form-group" style="margin-top:16px">
           <label>Комментарий</label>
           <textarea
@@ -199,6 +209,7 @@ const form = reactive({
   group: (route.query.group as string) || '',
   observed_at: new Date(),
   species_id: querySpeciesId as number | null,
+  unlisted_species_name: '',
   comment: '',
   lat: 52.59,
   lon: 39.60,
@@ -393,6 +404,10 @@ async function submit() {
       lat: form.lat,
       lon: form.lon,
       species_id: form.species_id,
+      unlisted_species_name:
+        !form.species_id && form.unlisted_species_name.trim()
+          ? form.unlisted_species_name.trim()
+          : null,
       comment: form.comment || null,
       is_incident: form.is_incident,
       safety_checked: form.safety_checked,

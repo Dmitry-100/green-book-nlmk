@@ -215,6 +215,7 @@ def create_observation(
             detail="Версия правил загрузки фото устарела. Обновите страницу.",
         )
     _reject_personal_data_text(data.comment, field_name="Комментарий")
+    _reject_personal_data_text(data.unlisted_species_name, field_name="Название вида")
 
     species = None
     if data.species_id:
@@ -225,6 +226,7 @@ def create_observation(
     obs = Observation(
         author_id=user.id,
         species_id=data.species_id,
+        unlisted_species_name=data.unlisted_species_name,
         group=species.group.value if species else data.group.value,
         observed_at=data.observed_at,
         location_point=point,
@@ -429,6 +431,12 @@ def update_observation(
     if "comment" in updates:
         _reject_personal_data_text(updates["comment"], field_name="Комментарий")
         obs.comment = updates["comment"]
+    if "unlisted_species_name" in updates:
+        claim = updates["unlisted_species_name"]
+        if claim is not None:
+            claim = claim.strip() or None
+        _reject_personal_data_text(claim, field_name="Название вида")
+        obs.unlisted_species_name = claim
     if "species_id" in updates:
         if updates["species_id"] is None:
             obs.species_id = None
@@ -436,6 +444,15 @@ def update_observation(
             species = _get_species_or_404(updates["species_id"], db)
             obs.species_id = species.id
             obs.group = species.group.value
+            # Выбран вид из справочника — заявка на новый вид снимается,
+            # если в этом же запросе не передали новую.
+            if "unlisted_species_name" not in updates:
+                obs.unlisted_species_name = None
+    if obs.species_id is not None and obs.unlisted_species_name:
+        raise HTTPException(
+            status_code=400,
+            detail="Укажите либо вид из справочника, либо название нового вида",
+        )
     db.commit()
     db.refresh(obs)
     if obs.status in (ObservationStatus.on_review, ObservationStatus.needs_data):

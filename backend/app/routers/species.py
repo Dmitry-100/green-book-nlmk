@@ -174,7 +174,9 @@ def get_species(species_id: int, db: Session = Depends(get_db)):
 @router.post("", response_model=SpeciesResponse, status_code=201)
 def create_species(
     data: SpeciesCreate,
-    user: User = Depends(require_role(UserRole.admin)),
+    # Эколог создаёт виды, чтобы разрешать заявки на новые виды из наблюдений;
+    # редактирование и удаление существующих карточек остаётся за админом.
+    user: User = Depends(require_role(UserRole.ecologist, UserRole.admin)),
     db: Session = Depends(get_db),
 ):
     species = Species(**data.model_dump())

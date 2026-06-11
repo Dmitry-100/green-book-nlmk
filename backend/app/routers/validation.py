@@ -202,6 +202,8 @@ def confirm_observation(
     if data.species_id is not None:
         species = _get_species_or_404(data.species_id, db)
         obs.species_id = species.id
+        # Эколог определил вид — заявка автора на новый вид разрешена.
+        obs.unlisted_species_name = None
     elif obs.species_id:
         species = _get_species_or_404(obs.species_id, db)
 

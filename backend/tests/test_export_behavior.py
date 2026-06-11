@@ -128,6 +128,7 @@ def test_export_observations_applies_filters_and_formats_xlsx(client, db, ecolog
         "Дата",
         "Статус",
         "Вид",
+        "Заявленный вид",
         "Комментарий",
         "Широта",
         "Долгота",
@@ -141,8 +142,8 @@ def test_export_observations_applies_filters_and_formats_xlsx(client, db, ecolog
     assert exported[1] == SpeciesGroup.birds.value
     assert exported[3] == ObservationStatus.confirmed.value
     assert exported[4] == f"{bird_species.name_ru} ({bird_species.name_latin})"
-    assert exported[5] == "included row"
-    assert exported[8] == "Да"
+    assert exported[6] == "included row"
+    assert exported[9] == "Да"
 
 
 def test_export_observations_handles_missing_species_reference(client, db, ecologist_token):
@@ -167,4 +168,26 @@ def test_export_observations_handles_missing_species_reference(client, db, ecolo
     exported = rows[1]
     assert exported[0] == observation.id
     assert exported[4] in ("", None)
-    assert exported[5] == "no species linked"
+    assert exported[6] == "no species linked"
+
+
+def test_export_escapes_formula_like_user_text(client, db, ecologist_token):
+    author = _create_user(db, external_id="export-author-003")
+    _create_observation(
+        db,
+        author_id=author.id,
+        species_id=None,
+        group=SpeciesGroup.mammals.value,
+        status=ObservationStatus.confirmed,
+        comment="=HYPERLINK(\"http://evil\")",
+    )
+
+    response = client.get(
+        "/api/export/observations?status=confirmed",
+        headers={"Authorization": f"Bearer {ecologist_token}"},
+    )
+    assert response.status_code == 200
+
+    workbook = _open_export_workbook(response.content)
+    rows = list(workbook["Наблюдения"].iter_rows(values_only=True))
+    assert rows[1][6] == "'=HYPERLINK(\"http://evil\")"

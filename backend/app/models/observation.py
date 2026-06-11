@@ -124,6 +124,9 @@ class Observation(Base):
         Enum(ObservationStatus), default=ObservationStatus.on_review, index=True
     )
     comment: Mapped[str | None] = mapped_column(Text)
+    # Название вида со слов автора, когда вид не найден в справочнике.
+    # Взаимоисключающе со species_id; разрешается экологом при валидации.
+    unlisted_species_name: Mapped[str | None] = mapped_column(String(200))
     is_incident: Mapped[bool] = mapped_column(Boolean, default=False)
     incident_type: Mapped[IncidentType | None] = mapped_column(Enum(IncidentType))
     incident_severity: Mapped[IncidentSeverity | None] = mapped_column(

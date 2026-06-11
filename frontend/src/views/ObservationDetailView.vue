@@ -31,6 +31,10 @@
           <span class="info-label">Вид</span>
           <span class="info-value">{{ speciesName }}</span>
         </div>
+        <div class="info-item" v-else-if="obs.unlisted_species_name">
+          <span class="info-label">Заявленный вид</span>
+          <span class="info-value">{{ obs.unlisted_species_name }} (не из справочника, ожидает проверки экологом)</span>
+        </div>
         <div class="info-item">
           <span class="info-label">Группа</span>
           <span class="info-value">{{ groupLabels[obs.group] || obs.group }}</span>

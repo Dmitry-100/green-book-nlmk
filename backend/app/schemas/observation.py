@@ -17,6 +17,7 @@ class ObservationCreate(BaseModel):
     lat: float = Field(ge=-90, le=90)
     lon: float = Field(ge=-180, le=180)
     species_id: int | None = Field(default=None, gt=0)
+    unlisted_species_name: str | None = Field(default=None, max_length=200)
     comment: str | None = Field(default=None, max_length=2000)
     is_incident: bool = False
     incident_type: IncidentType | None = None
@@ -34,6 +35,16 @@ class ObservationCreate(BaseModel):
                 )
         return self
 
+    @model_validator(mode="after")
+    def validate_species_claim(self):
+        if self.unlisted_species_name is not None:
+            self.unlisted_species_name = self.unlisted_species_name.strip() or None
+        if self.species_id is not None and self.unlisted_species_name is not None:
+            raise ValueError(
+                "Укажите либо вид из справочника, либо название нового вида"
+            )
+        return self
+
 
 class MediaAttach(BaseModel):
     s3_key: str = Field(min_length=1, max_length=500)
@@ -44,6 +55,7 @@ class MediaAttach(BaseModel):
 class ObservationUpdate(BaseModel):
     comment: str | None = Field(default=None, max_length=2000)
     species_id: int | None = Field(default=None, gt=0)
+    unlisted_species_name: str | None = Field(default=None, max_length=200)
 
 
 class MediaInfo(BaseModel):
@@ -67,6 +79,7 @@ class ObservationResponse(BaseModel):
     site_zone_id: int | None
     status: ObservationStatus
     comment: str | None
+    unlisted_species_name: str | None = None
     is_incident: bool
     incident_type: IncidentType | None
     incident_severity: IncidentSeverity | None

@@ -146,6 +146,96 @@ def test_create_observation_uses_species_group(client, db, employee_token, monke
     assert payload["sensitive_level"] == SensitiveLevel.blurred.value
 
 
+def _claim_payload(**overrides):
+    payload = {
+        "group": "birds",
+        "observed_at": "2026-04-11T10:30:00Z",
+        "lat": 52.59,
+        "lon": 39.60,
+        "safety_checked": True,
+        "content_notice_accepted": True,
+        "content_notice_version": settings.privacy_notice_version,
+        "is_incident": False,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_create_observation_with_unlisted_species_claim(
+    client, employee_token, monkeypatch
+):
+    monkeypatch.setattr(observations_router, "detect_zone", lambda *_a, **_k: None)
+
+    response = client.post(
+        "/api/observations",
+        headers={"Authorization": f"Bearer {employee_token}"},
+        json=_claim_payload(unlisted_species_name="  Хохлатая чернеть  "),
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["species_id"] is None
+    assert payload["unlisted_species_name"] == "Хохлатая чернеть"
+
+
+def test_create_observation_rejects_claim_with_catalog_species(
+    client, db, employee_token, monkeypatch
+):
+    species = _create_species(db, name_suffix="ClaimConflict", group=SpeciesGroup.birds)
+    monkeypatch.setattr(observations_router, "detect_zone", lambda *_a, **_k: None)
+
+    response = client.post(
+        "/api/observations",
+        headers={"Authorization": f"Bearer {employee_token}"},
+        json=_claim_payload(
+            species_id=species.id,
+            unlisted_species_name="Хохлатая чернеть",
+        ),
+    )
+
+    assert response.status_code == 422
+
+
+def test_create_observation_rejects_personal_data_in_claim(
+    client, employee_token, monkeypatch
+):
+    monkeypatch.setattr(observations_router, "detect_zone", lambda *_a, **_k: None)
+
+    response = client.post(
+        "/api/observations",
+        headers={"Authorization": f"Bearer {employee_token}"},
+        json=_claim_payload(unlisted_species_name="звоните +7 900 123-45-67"),
+    )
+
+    assert response.status_code == 400
+    assert "Название вида" in response.json()["detail"]
+
+
+def test_update_assigning_species_clears_claim(client, db, employee_token, monkeypatch):
+    author = _create_user(db, external_id="test-user-001")
+    species = _create_species(db, name_suffix="ClaimResolve", group=SpeciesGroup.birds)
+    obs = _create_observation(
+        db,
+        author_id=author.id,
+        status=ObservationStatus.needs_data,
+        group=SpeciesGroup.birds.value,
+    )
+    obs.unlisted_species_name = "Хохлатая чернеть"
+    db.commit()
+    monkeypatch.setattr(observations_router, "detect_zone", lambda *_a, **_k: None)
+
+    response = client.patch(
+        f"/api/observations/{obs.id}",
+        headers={"Authorization": f"Bearer {employee_token}"},
+        json={"species_id": species.id},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["species_id"] == species.id
+    assert payload["unlisted_species_name"] is None
+
+
 def test_create_observation_validates_incident_fields(client, employee_token):
     response = client.post(
         "/api/observations",

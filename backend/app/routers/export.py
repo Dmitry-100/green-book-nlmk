@@ -15,6 +15,14 @@ from app.models.user import User, UserRole
 router = APIRouter(prefix="/api/export", tags=["export"])
 
 
+def _safe_cell(value: str) -> str:
+    """Нейтрализует formula injection: Excel исполняет ячейки,
+    начинающиеся с = + - @, апостроф принуждает к тексту."""
+    if value and value[0] in "=+-@\t\r":
+        return "'" + value
+    return value
+
+
 @router.get("/observations")
 def export_observations(
     group: SpeciesGroup | None = None,
@@ -44,7 +52,7 @@ def export_observations(
     wb = Workbook()
     ws = wb.active
     ws.title = "Наблюдения"
-    headers = ["ID", "Группа", "Дата", "Статус", "Вид", "Комментарий", "Широта", "Долгота", "Инцидент", "Создано"]
+    headers = ["ID", "Группа", "Дата", "Статус", "Вид", "Заявленный вид", "Комментарий", "Широта", "Долгота", "Инцидент", "Создано"]
     ws.append(headers)
 
     for obs in observations:
@@ -55,7 +63,8 @@ def export_observations(
             obs.observed_at.strftime("%Y-%m-%d %H:%M") if obs.observed_at else "",
             obs.status.value if obs.status else "",
             species_name,
-            obs.comment or "",
+            _safe_cell(obs.unlisted_species_name or ""),
+            _safe_cell(obs.comment or ""),
             "",  # lat — will be extracted from geometry in production
             "",  # lon
             "Да" if obs.is_incident else "Нет",

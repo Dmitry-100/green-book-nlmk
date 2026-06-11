@@ -205,13 +205,28 @@ def test_get_species_not_found(client):
     assert response.status_code == 404
 
 
-def test_create_species_requires_admin(client, employee_token):
+def test_create_species_forbidden_for_employee(client, employee_token):
     response = client.post(
         "/api/species",
         json={"name_ru": "Test", "name_latin": "Test", "group": "plants", "category": "typical"},
         headers={"Authorization": f"Bearer {employee_token}"},
     )
     assert response.status_code == 403
+
+
+def test_create_species_allowed_for_ecologist(client, db, ecologist_token):
+    response = client.post(
+        "/api/species",
+        json={
+            "name_ru": "Заявленный вид",
+            "name_latin": "Species proposita",
+            "group": "plants",
+            "category": "typical",
+        },
+        headers={"Authorization": f"Bearer {ecologist_token}"},
+    )
+    assert response.status_code == 201
+    assert response.json()["name_ru"] == "Заявленный вид"
 
 
 def test_create_species_rejects_blank_name(client, admin_token):
