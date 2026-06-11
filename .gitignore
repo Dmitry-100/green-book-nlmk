@@ -11,6 +11,19 @@ coverage/
 
 # Environment
 .env
+.env.*
+!.env.example
+
+# Backups and dumps (содержат персональные данные — не коммитить)
+backups/
+*.sql
+*.sql.gz
+*.sql.gz.age
+*.sql.gz.enc
+
+# Caches
+.pytest_cache/
+.cache/
 
 # IDE
 .idea/
